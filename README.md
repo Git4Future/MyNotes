@@ -541,27 +541,146 @@ ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;
 
 线程池提供了一种限制和管理资源（包括执行一个任务）。 每个线程池还维护一些基本统计信息，例如已完成任务的数量。
 
-- **降低资源消耗。** 通过重复利用已创建的线程降低线程创建和销毁造成的消耗。
-- **提高响应速度。** 当任务到达时，任务可以不需要的等到线程创建就能立即执行。
-- **提高线程的可管理性。** 线程是稀缺资源，如果无限制的创建，不仅会消耗系统资源，还会降低系统的稳定性，使用线程池可以进行统一的分配，调优和监控。
+- **降低资源消耗:** 通过重复利用已创建的线程降低线程创建和销毁造成的消耗。
+- **提高响应速度:** 当任务到达时，任务可以不需要等到线程创建就能立即执行。
+- **提高线程的可管理性:** 线程是稀缺资源，如果无限制的创建，不仅会消耗系统资源，还会降低系统的稳定性，使用线程池可以进行统一的分配，调优和监控。
+- **解耦作用:**线程的创建于执行完全分开，方便维护。
+
+##### 17.2  如何创建线程池  ?
+
+**方式一：通过构造方法实现** [![ThreadPoolExecutor构造方法](https://camo.githubusercontent.com/c1a87ea139bc0379f5c98484416594843ff29d6d/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f546872656164506f6f6c4578656375746f722545362539452538342545392538302541302545362539362542392545362542332539352e706e67)](https://camo.githubusercontent.com/c1a87ea139bc0379f5c98484416594843ff29d6d/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f546872656164506f6f6c4578656375746f722545362539452538342545392538302541302545362539362542392545362542332539352e706e67)
 
 
 
+**方式二：通过Executor 框架的工具类Executors来实现** 我们可以创建三种类型的ThreadPoolExecutor：
+
+- **FixedThreadPool** ： 该方法返回一个固定线程数量的线程池。该线程池中的线程数量始终不变。当有一个新的任务提交时，线程池中若有空闲线程，则立即执行。若没有，则新的任务会被暂存在一个任务队列中，待有线程空闲时，便处理在任务队列中的任务。
+- **SingleThreadExecutor：** 方法返回一个只有一个线程的线程池。若多余一个任务被提交到该线程池，任务会被保存在一个任务队列中，待线程空闲，按先入先出的顺序执行队列中的任务。
+- **CachedThreadPool：** 该方法返回一个可根据实际情况调整线程数量的线程池。线程池的线程数量不确定，但若有空闲线程可以复用，则会优先使用可复用的线程。若所有线程均在工作，又有新的任务提交，则会创建新的线程处理任务。所有线程在当前任务执行完毕后，将返回线程池进行复用。
+
+对应Executors工具类中的方法如图所示： [![Executor框架的工具类](https://camo.githubusercontent.com/6cfe663a5033e0f4adcfa148e6c54cdbb97c00bb/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f4578656375746f722545362541312538362545362539452542362545372539412538342545352542372541352545352538352542372545372542312542422e706e67)](https://camo.githubusercontent.com/6cfe663a5033e0f4adcfa148e6c54cdbb97c00bb/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f4578656375746f722545362541312538362545362539452542362545372539412538342545352542372541352545352538352542372545372542312542422e706e67)
+
+**《阿里巴巴Java开发手册》中强制线程池不允许使用 Executors 去创建，而是通过 ThreadPoolExecutor 的方式，这样的处理方式让写的同学更加明确线程池的运行规则，规避资源耗尽的风险**
+
+> Executors 返回线程池对象的弊端如下：
+>
+> - **FixedThreadPool 和 SingleThreadExecutor** ： 允许请求的队列长度为 Integer.MAX_VALUE ，可能堆积大量的请求，从而导致OOM。
+> - **CachedThreadPool 和 ScheduledThreadPool** ： 允许创建的线程数量为 Integer.MAX_VALUE ，可能会创建大量线程，从而导致OOM。
 
 
 
+##### 17.3 线程池原理（ThreadPoolExecutor类）
+
+**Executor框架**
+
+Executor框架是java中的线程池实现。Executor是最顶层的接口定义，它的子类和实现主要包括ExecutorService，ScheduledExecutorService，ThreadPoolExecutor，ScheduledThreadPoolExecutor，ForkJoinPool等。其结构如下图所示：
+
+![img](https://upload-images.jianshu.io/upload_images/11963487-4723841eba39749b.png?imageMogr2/auto-orient/strip|imageView2/2/w/538/format/webp)
 
 
 
+**Executor**：Executor是一个接口，其只定义了一个execute()方法：`void execute(Runnable command);`，只能提交Runnable形式的任务，不支持提交Callable带有返回值的任务。
+**ExecutorService**：ExecutorService在Executor的基础上加入了线程池的生命周期管理，我们可以通过ExecutorService#shutdown或者ExecutorService#shutdownNow方法来关闭我们的线程池。ExecutorService支持提交Callable形式的任务，提交完Callable任务后我们拿到一个Future，它代表一个异步任务执行的结果。关于shutdown和shutdownNow方法我们需要注意的是：这两个方法是非阻塞的，调用后立即返回，不会等待线程池关闭完成。如果我们需要等待线程池处理完成再返回可以使用ExecutorService#awaitTermination来完成。
+shutdown方法会等待线程池中已经运行的任何和阻塞队列中等待执行的任务执行完成，而shutdownNow则不会，shutdownNow方法会尝试中断线程池中已经运行的任务，阻塞队列中等待的任务不会再被执行，阻塞队列中等待执行的任务会作为返回值返回。
 
+###### 17.3.1 **线程池状态**
 
+　　在ThreadPoolExecutor中定义了一个volatile变量，另外定义了几个static final变量表示线程池的各个状态：
 
+```Java
+volatile int runState;
+static final int RUNNING    = 0;
+static final int SHUTDOWN   = 1;
+static final int STOP       = 2;
+static final int TERMINATED = 3;
+```
 
+ 　　runState表示当前线程池的状态，它是一个volatile变量用来保证线程之间的可见性；
 
+如果调用了shutdown()方法，则线程池处于SHUTDOWN状态，此时线程池不能够接受新的任务，它会等待所有任务执行完毕；如果调用了shutdownNow()方法，则线程池处于STOP状态，此时线程池不能接受新的任务，并且会去尝试终止正在执行的任务；当线程池处于SHUTDOWN或STOP状态，并且所有工作线程已经销毁，任务缓存队列已经清空或执行结束后，线程池被设置为TERMINATED状态。
 
+###### 17.3.2 任务的执行
 
+**ThreadPoolExecutor类构造参数：**
 
+```Java
+private final BlockingQueue<Runnable> workQueue;              //任务缓存队列，用来存放等待执行的任务
+private final ReentrantLock mainLock = new ReentrantLock();   //线程池的主要状态锁，对线程池状态（比如线程池大小，runState等）的改变都要使用这个锁
+private final HashSet<Worker> workers = new HashSet<Worker>(); //用来存放工作集
+private volatile long keepAliveTime;    //线程存活时间，这两个参数主要用来控制idle threads的最大空闲时间，超过这个空闲时间空闲线程将被回收。这里有一点需要注意，ThreadPoolExecutor中有一个属性:private volatile boolean allowCoreThreadTimeOut;，这个用来指定是否允许核心线程空闲超时回收，默认为false，即不允许核心线程超时回收，核心线程将一直等待新任务。如果设置这个参数为true，核心线程空闲超时后也可以被回收。
+private volatile boolean allowCoreThreadTimeOut;   //是否允许为核心线程设置存活时间
+private volatile int corePoolSize;     //核心池的大小（即线程池中的线程数目大于这个参数时，提交的任务会被放进任务缓存队列）
+private volatile int maximumPoolSize;   //线程池最大能容忍的线程数，当线程池数量已经等于corePoolSize并且阻塞队列也已经满了，则看线程数量是否小于maximumPoolSize：如果小于则创建一个线程来处理请求，否则使用“饱和策略”来拒绝这个请求。对于大于corePoolSize部分的线程，称作这部分线程为“idle threads”，这部分线程会有一个最大空闲时间，如果超过这个空闲时间还没有任务进来则将这些空闲线程回收。
+private volatile int poolSize;       //线程池中当前的线程数
+private volatile RejectedExecutionHandler handler; //任务拒绝策略 
+private volatile ThreadFactory threadFactory; //线程工厂，用来创建线程
+private int largestPoolSize;   //用来记录线程池中曾经出现过的最大线程数
+private long completedTaskCount;  //用来记录已经执行完毕的任务个数
+```
 
+- 如果当前线程池中的线程数目小于corePoolSize，则每来一个任务，就会创建一个线程去执行这个任务；
+- 如果当前线程池中的线程数目>=corePoolSize，则每来一个任务，会尝试将其添加到任务缓存队列当中，若添加成功，则该任务会等待空闲线程将其取出去执行；若添加失败（一般来说是任务缓存队列已满），则会尝试创建新的线程去执行这个任务；
+- 如果当前线程池中的线程数目达到maximumPoolSize，则会采取任务拒绝策略进行处理；
+- 如果线程池中的线程数量大于 corePoolSize时，如果某线程空闲时间超过keepAliveTime，线程将被终止，直至线程池中的线程数目不大于corePoolSize；如果允许为核心池中的线程设置存活时间，那么核心池中的线程空闲时间超过keepAliveTime，线程也会被终止。
+
+###### 17.3.3 线程池中的线程初始化
+
+　　默认情况下，创建线程池之后，线程池中是没有线程的，需要提交任务之后才会创建线程。
+
+　　在实际中如果需要线程池创建之后立即创建线程，可以通过以下两个方法办到：
+
+```Java
+/**初始化一个核心线程**/
+public boolean prestartCoreThread() {
+    return addIfUnderCorePoolSize(null); //注意传进去的参数是null
+}
+/**初始化所有核心线程**/
+public int prestartAllCoreThreads() {
+    int n = 0;
+    while (addIfUnderCorePoolSize(null))//注意传进去的参数是null
+        ++n;
+    return n;
+}
+```
+
+###### 17.3.4 任务缓存队列及排队策略
+
+　　在前面我们多次提到了任务缓存队列，即workQueue，它用来存放等待执行的任务。
+
+　　workQueue的类型为BlockingQueue<Runnable>，通常可以取下面三种类型：
+
+　　1.ArrayBlockingQueue：基于数组的先进先出队列，此队列创建时必须指定大小；
+
+　　2.LinkedBlockingQueue：基于链表的先进先出队列，如果创建时没有指定此队列大小，则默认为          Integer.MAX_VALUE；
+
+　　3.synchronousQueue：这个队列比较特殊，它不会保存提交的任务，而是将直接新建一个线程来执行新来的任务。
+
+###### 17.3.5 任务拒绝策略
+
+当线程池的任务缓存队列已满并且线程池中的线程数目达到maximumPoolSize，如果还有任务到来就会采取任务拒绝策略，通常有以下四种策略：
+
+```Java
+ThreadPoolExecutor.AbortPolicy:丢弃任务并抛出RejectedExecutionException异常。
+ThreadPoolExecutor.DiscardPolicy：也是丢弃任务，但是不抛出异常。
+ThreadPoolExecutor.DiscardOldestPolicy：丢弃队列最前面的任务，然后重新尝试执行任务（重复此过程）
+ThreadPoolExecutor.CallerRunsPolicy：由调用线程处理该任务
+```
+
+###### 17.4.6 线程池的关闭
+
+　　ThreadPoolExecutor提供了两个方法，用于线程池的关闭，分别是shutdown()和shutdownNow()，其中：
+
+- shutdown()：不会立即终止线程池，而是要等所有任务缓存队列中的任务都执行完后才终止，但再也不会接受新的任务
+- shutdownNow()：立即终止线程池，并尝试打断正在执行的任务，并且清空任务缓存队列，返回尚未执行的任务
+
+###### 17.3.7 线程池容量的动态调整
+
+　　ThreadPoolExecutor提供了动态调整线程池容量大小的方法：setCorePoolSize()和setMaximumPoolSize()，
+
+- setCorePoolSize：设置核心池大小
+- setMaximumPoolSize：设置线程池最大能创建的线程数目大小
+
+当上述参数从小变大时，ThreadPoolExecutor进行线程赋值，还可能立即创建新的线程来执行任务。
 
 
 
