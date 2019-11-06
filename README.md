@@ -129,7 +129,7 @@ Spring AOP 已经集成了 AspectJ ，AspectJ 应该算的上是 Java 生态系�
 
 ## 并发
 
-### 并发面试题总结
+### 一、并发面试题总结
 
 #### 1. 什么是线程和进程?
 
@@ -447,13 +447,182 @@ volatile关键字的原理和实现机制：
 要实现原子性,建议使用atomic类的系列对象,支持原子性操作.(注意atomic类只保证本身方法原子性,并不保证多次操作的原子性.除非在方法或对象上加synchronized锁)。
 
 对于原子操作类，Java的concurrent并发包中主要为我们提供了这么几个常用的：AtomicInteger、AtomicLong、AtomicBoolean、AtomicReference<**T**>。
+
+并发包 `java.util.concurrent` 的原子类都存放在`java.util.concurrent.atomic`下,如下图所示。
+
+[![JUC原子类概览](https://camo.githubusercontent.com/b912dfaf3c2985b71a672c7f52c06a6852689f92/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f4a55432545352538452539462545352541442539302545372542312542422545362541362538322545382541372538382e706e67)](https://camo.githubusercontent.com/b912dfaf3c2985b71a672c7f52c06a6852689f92/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f4a55432545352538452539462545352541442539302545372542312542422545362541362538322545382541372538382e706e67)
+
+**JUC 包中的原子类是哪4类?**
+
+**基本类型**
+
+使用原子的方式更新基本类型
+
+- AtomicInteger：整形原子类
+- AtomicLong：长整型原子类
+- AtomicBoolean：布尔型原子类
+
+**数组类型**
+
+使用原子的方式更新数组里的某个元素
+
+- AtomicIntegerArray：整形数组原子类
+
+  **AtomicIntegerArray 类常用方法**
+
+  ```java
+  public final int get(int i) //获取 index=i 位置元素的值
+  public final int getAndSet(int i, int newValue)//返回 index=i 位置的当前的值，并将其设置为新值：newValue
+  public final int getAndIncrement(int i)//获取 index=i 位置元素的值，并让该位置的元素自增
+  public final int getAndDecrement(int i) //获取 index=i 位置元素的值，并让该位置的元素自减
+  public final int getAndAdd(int delta) //获取 index=i 位置元素的值，并加上预期的值
+  boolean compareAndSet(int expect, int update) //如果输入的数值等于预期值，则以原子方式将 index=i 位置的元素值设置为输入值（update）
+  public final void lazySet(int i, int newValue)//最终 将index=i 位置的元素设置为newValue,使用 lazySet 设置之后可能导致其他线程在之后的一小段时间内还是可以读到旧的值。
+  ```
+
+  **AtomicIntegerArray 常见方法使用**
+
+  ```java
+  import java.util.concurrent.atomic.AtomicIntegerArray;
+  
+  public class AtomicIntegerArrayTest {
+  	public static void main(String[] args) {
+  		// TODO Auto-generated method stub
+  		int temvalue = 0;
+  		int[] nums = { 1, 2, 3, 4, 5, 6 };
+  		AtomicIntegerArray i = new AtomicIntegerArray(nums);
+  		for (int j = 0; j < nums.length; j++) {
+  			System.out.println(i.get(j));
+  		}
+  		temvalue = i.getAndSet(0, 2);
+  		System.out.println("temvalue:" + temvalue + ";  i:" + i);
+  		temvalue = i.getAndIncrement(0);
+  		System.out.println("temvalue:" + temvalue + ";  i:" + i);
+  		temvalue = i.getAndAdd(0, 5);
+  		System.out.println("temvalue:" + temvalue + ";  i:" + i);
+  	}
+  }
+  ```
+
+- AtomicLongArray：长整形数组原子类
+
+- AtomicReferenceArray：引用类型数组原子类
+
+**引用类型**
+
+- AtomicReference：引用类型原子类
+
+   **AtomicReference 类使用示例**
+
+  ```java
+  import java.util.concurrent.atomic.AtomicReference;
+  
+  public class AtomicReferenceTest {
+  
+  	public static void main(String[] args) {
+  		AtomicReference<Person> ar = new AtomicReference<Person>();
+  		Person person = new Person("SnailClimb", 22);
+  		ar.set(person);
+  		Person updatePerson = new Person("Daisy", 20);
+  		ar.compareAndSet(person, updatePerson);
+  
+  		System.out.println(ar.get().getName());
+  		System.out.println(ar.get().getAge());
+  	}
+  }
+  
+  class Person {
+  	private String name;
+  	private int age;
+  	public Person(String name, int age) {
+  		super();
+  		this.name = name;
+  		this.age = age;
+  	}
+  	public String getName() {
+  		return name;
+  	}
+  	public void setName(String name) {
+  		this.name = name;
+  	}
+  	public int getAge() {
+  		return age;
+  	}
+  	public void setAge(int age) {
+  		this.age = age;
+  	}
+  }
+  ```
+
+  上述代码首先创建了一个 Person 对象，然后把 Person 对象设置进 AtomicReference 对象中，然后调用 compareAndSet 方法，该方法就是通过通过 CAS 操作设置 ar。如果 ar 的值为 person 的话，则将其设置为 updatePerson。实现原理与 AtomicInteger 类中的 compareAndSet 方法相同。运行上面的代码后的输出结果如下：
+
+- AtomicStampedReference：原子更新引用类型里的字段原子类
+
+  **AtomicStampedReference 类使用示例**
+
+  ```java
+  import java.util.concurrent.atomic.AtomicStampedReference;
+  
+  public class AtomicStampedReferenceDemo {
+      public static void main(String[] args) {
+          // 实例化、取当前值和 stamp 值
+          final Integer initialRef = 0, initialStamp = 0;
+          final AtomicStampedReference<Integer> asr = new AtomicStampedReference<>(initialRef, initialStamp);
+          System.out.println("currentValue=" + asr.getReference() + ", currentStamp=" + asr.getStamp());
+  
+          // compare and set
+          final Integer newReference = 666, newStamp = 999;
+          final boolean casResult = asr.compareAndSet(initialRef, newReference, initialStamp, newStamp);
+          System.out.println("currentValue=" + asr.getReference()
+                  + ", currentStamp=" + asr.getStamp()
+                  + ", casResult=" + casResult);
+  
+          // 获取当前的值和当前的 stamp 值
+          int[] arr = new int[1];
+          final Integer currentValue = asr.get(arr);
+          final int currentStamp = arr[0];
+          System.out.println("currentValue=" + currentValue + ", currentStamp=" + currentStamp);
+  
+          // 单独设置 stamp 值
+          final boolean attemptStampResult = asr.attemptStamp(newReference, 88);
+          System.out.println("currentValue=" + asr.getReference()
+                  + ", currentStamp=" + asr.getStamp()
+                  + ", attemptStampResult=" + attemptStampResult);
+  
+          // 重新设置当前值和 stamp 值
+          asr.set(initialRef, initialStamp);
+          System.out.println("currentValue=" + asr.getReference() + ", currentStamp=" + asr.getStamp());
+  
+          // [不推荐使用，除非搞清楚注释的意思了] weak compare and set
+          // 困惑！weakCompareAndSet 这个方法最终还是调用 compareAndSet 方法。[版本: jdk-8u191]
+          // 但是注释上写着 "May fail spuriously and does not provide ordering guarantees,
+          // so is only rarely an appropriate alternative to compareAndSet."
+          // todo 感觉有可能是 jvm 通过方法名在 native 方法里面做了转发
+          final boolean wCasResult = asr.weakCompareAndSet(initialRef, newReference, initialStamp, newStamp);
+          System.out.println("currentValue=" + asr.getReference()
+                  + ", currentStamp=" + asr.getStamp()
+                  + ", wCasResult=" + wCasResult);
+      }
+  }
+  ```
+
+- AtomicMarkableReference ：原子更新带有标记位的引用类型
+
+**对象的属性修改类型**
+
+- AtomicIntegerFieldUpdater：原子更新整形字段的更新器
+- AtomicLongFieldUpdater：原子更新长整形字段的更新器
+- AtomicStampedReference：原子更新带有版本号的引用类型。该类将整数值与引用关联起来，可用于解决原子的更新数据和数据的版本号，可以解决使用 CAS 进行原子更新时可能出现的 ABA 问题。
+
 对于原子操作类，最大的特点是在多线程并发操作同一个资源的情况下，使用Lock-Free算法来替代锁，这样开销小、速度快，对于原子操作类是采用原子操作指令实现的，从而可以保证操作的原子性。什么是原子性？比如一个操作i++；实际上这是三个原子操作，先把i的值读取、然后修改(+1)、最后写入给i。所以使用Atomic原子类操作数，比如：i++；那么它会在这步操作都完成情况下才允许其它线程再对它进行操作，而这个实现则是通过Lock-Free+原子操作指令来确定的。而关于Lock-Free算法，则是一种新的策略替代锁来保证资源在并发时的完整性的，Lock-Free的实现有三步：
 
 > 1、循环（for(;;)、while）
 > 2、CAS（CompareAndSet）
 > 3、回退（return、break）
 
-##### **16.4 Atomic关键字和 volatile 关键字的区别:**
+
+
+##### 16.4 Atomic关键字和 volatile 关键字的区别?
 
 java关键字volatile，从表面意思上是说这个变量是易变的，不稳定的，事实上，确实如此，这个关键字的作用就是告诉编译器，凡是被该关键字声明的变量都是易变的、不稳定的。所以不要试图对该变量使用缓存等优化机制，而应当每次都从它的内存地址中去读值。使用volatile标记的变量在读取或写入时不需要使用锁，这将减少产生死锁的概率，使代码保持简洁。请注意，这里只是说每次读取volatile的变量时都要从它的内存地址中读取，**并没有说每次修改完volatile的变量后都要立刻将它的值写回内存**。也就是说volatile只提供了内存可见性，而没有提供原子性，操作互斥提供了操作整体的原子性，同一个变量多个线程间的可见性与多个线程中操作互斥是两件事情，所以说如果用这个关键字做高并发的安全机制的话是不可靠的。
 
@@ -465,7 +634,30 @@ public volatile static int count=0;//在声明的时候带上volatile关键字�
 
 　　什么时候使用volatile关键字？当我们知道了volatile的作用，我们也就知道了它应该用在哪些地方,很显然，**最好是那种只有一个线程修改变量，多个线程读取变量的地方。也就是对内存可见性要求高，而对原子性要求低的地方。**
 
-##### 16.5 ThreadLocal及原理
+##### 16.5 能不能给我简单介绍一下 AtomicInteger 类的原理
+
+AtomicInteger 类的部分源码：
+
+```java
+    // setup to use Unsafe.compareAndSwapInt for updates（更新操作时提供“比较并替换”的作用）
+    private static final Unsafe unsafe = Unsafe.getUnsafe();
+    private static final long valueOffset;
+
+    static {
+        try {
+            valueOffset = unsafe.objectFieldOffset
+                (AtomicInteger.class.getDeclaredField("value"));
+        } catch (Exception ex) { throw new Error(ex); }
+    }
+
+    private volatile int value;
+```
+
+AtomicInteger 类主要利用 CAS (compare and swap) + volatile 和 native 方法来保证原子操作，从而避免 synchronized 的高开销，执行效率大为提升。
+
+CAS的原理是拿期望的值和原本的一个值作比较，如果相同则更新成新的值。UnSafe 类的 objectFieldOffset() 方法是一个本地方法，这个方法是用来拿到“原来的值”的内存地址，返回值是 valueOffset。另外 value 是一个volatile变量，在内存中可见，因此 JVM 可以保证任何时刻任何线程总能拿到该变量的最新值。
+
+##### 16.6 ThreadLocal及原理
 
 通常情况下，我们创建的变量是可以被任何一个线程访问并修改的。**如果想实现每一个线程都有自己的专属本地变量该如何解决呢？** JDK中提供的`ThreadLocal`类正是为了解决这样的问题。 **ThreadLocal类主要解决的就是让每个线程绑定自己的值，可以将ThreadLocal类形象的比喻成存放数据的盒子，盒子中可以存储每个线程的私有数据。**
 
@@ -505,7 +697,7 @@ ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;
 
 **每个Thread中都具备一个ThreadLocalMap，而ThreadLocalMap可以存储以ThreadLocal为key的键值对。这里解释了为什么每个线程访问同一个ThreadLocal，得到的确是不同的数值。另外，ThreadLocal 是 map结构是为了让每个线程可以关联多个 ThreadLocal变量。**
 
-#####  16.6 ThreadLocal 内存泄露问题
+#####  16.7 ThreadLocal 内存泄露问题
 
 `ThreadLocalMap` 中使用的 key 为 `ThreadLocal` 的弱引用,而 value 是强引用。所以，如果 `ThreadLocal` 没有被外部强引用的情况下，在垃圾回收的时候会 key 会被清理掉，而 value 不会被清理掉。这样一来，`ThreadLocalMap` 中就会出现key为null的Entry。假如我们不做任何措施的话，value 永远无法被GC 回收，这个时候就可能会产生内存泄露。ThreadLocalMap实现中已经考虑了这种情况，在调用 `set()`、`get()`、`remove()` 方法的时候，会清理掉 key 为 null 的记录。使用完 `ThreadLocal`方法后 最好手动调用`remove()`方法
 
@@ -666,7 +858,7 @@ ThreadPoolExecutor.DiscardOldestPolicy：丢弃队列最前面的任务，然后
 ThreadPoolExecutor.CallerRunsPolicy：由调用线程处理该任务
 ```
 
-###### 17.4.6 线程池的关闭
+###### 17.3.6 线程池的关闭
 
 　　ThreadPoolExecutor提供了两个方法，用于线程池的关闭，分别是shutdown()和shutdownNow()，其中：
 
@@ -682,31 +874,711 @@ ThreadPoolExecutor.CallerRunsPolicy：由调用线程处理该任务
 
 当上述参数从小变大时，ThreadPoolExecutor进行线程赋值，还可能立即创建新的线程来执行任务。
 
+###### 17.3.8 实现Runnable接口和Callable接口的区别
+
+如果想让线程池执行任务的话需要实现的Runnable接口或Callable接口。 Runnable接口或Callable接口实现类都可以被ThreadPoolExecutor或ScheduledThreadPoolExecutor执行。两者的区别在于 Runnable 接口不会返回结果但是 Callable 接口可以返回结果。
+
+**备注：** 工具类`Executors`可以实现`Runnable`对象和`Callable`对象之间的相互转换。（`Executors.callable（Runnable task）`或`Executors.callable（Runnable task，Object resule）`）。
+
+###### 17.3.9. 执行execute()方法和submit()方法的区别是什么呢？
+
+1.**execute() 方法用于提交不需要返回值的任务，所以无法判断任务是否被线程池执行成功与否；**
+
+2.**submit() 方法用于提交需要返回值的任务。线程池会返回一个Future类型的对象，通过这个Future对象可以判断任务是否执行成功**，并且可以通过future的get()方法来获取返回值，get()方法会阻塞当前线程直到任务完成，而使用 `get（long timeout，TimeUnit unit）`方法则会阻塞当前线程一段时间后立即返回，这时候有可能任务没有执行完。
+
+##### 18.AQS
+
+###### 18.1 AQS介绍
+
+AQS的全称为（AbstractQueuedSynchronizer），这个类在java.util.concurrent.locks包下面。
+
+[![AQS类](https://camo.githubusercontent.com/7e2bd67b66e3e1764a442b8d96689f64e5521c2c/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f4151532545372542312542422e706e67)](https://camo.githubusercontent.com/7e2bd67b66e3e1764a442b8d96689f64e5521c2c/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f4151532545372542312542422e706e67)
+
+AQS是一个用来构建锁和同步器的框架，使用AQS能简单且高效地构造出应用广泛的大量的同步器，比如我们提到的ReentrantLock，Semaphore，其他的诸如ReentrantReadWriteLock，SynchronousQueue，FutureTask等等皆是基于AQS的。当然，我们自己也能利用AQS非常轻松容易地构造出符合我们自己需求的同步器。
+
+###### 18.2. AQS 原理分析
+
+**AQS核心思想是，如果被请求的共享资源空闲，则将当前请求资源的线程设置为有效的工作线程，并且将共享资源设置为锁定状态。如果被请求的共享资源被占用，那么就需要一套线程阻塞等待以及被唤醒时锁分配的机制，这个机制AQS是用CLH队列锁实现的，即将暂时获取不到锁的线程加入到队列中。**
+
+> CLH(Craig,Landin,and Hagersten)队列是一个虚拟的双向队列（虚拟的双向队列即不存在队列实例，仅存在结点之间的关联关系）。AQS是将每条请求共享资源的线程封装成一个CLH锁队列的一个结点（Node）来实现锁的分配。
+
+看个AQS(AbstractQueuedSynchronizer)原理图：
+
+[![AQS原理图](https://camo.githubusercontent.com/13db51afdebad2dac67a224d422f6f60c9b8d366/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f4151532545352538452539462545372539302538362545352539422542452e706e67)](https://camo.githubusercontent.com/13db51afdebad2dac67a224d422f6f60c9b8d366/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f4151532545352538452539462545372539302538362545352539422542452e706e67)
+
+AQS使用一个int成员变量来表示同步状态，通过内置的FIFO队列来完成获取资源线程的排队工作。AQS使用CAS对该同步状态进行原子操作实现对其值的修改。
+
+```
+private volatile int state;//共享变量，使用volatile修饰保证线程可见性
+```
+
+状态信息通过protected类型的getState，setState，compareAndSetState进行操作
+
+```java 
+//返回同步状态的当前值
+protected final int getState() {  
+        return state;
+}
+ // 设置同步状态的值
+protected final void setState(int newState) { 
+        state = newState;
+}
+//原子地（CAS操作）将同步状态值设置为给定值update如果当前同步状态的值等于expect（期望值）
+protected final boolean compareAndSetState(int expect, int update) {
+        return unsafe.compareAndSwapInt(this, stateOffset, expect, update);
+}
+```
+
+###### 18.3  AQS 对资源的共享方式
+
+**AQS定义两种资源共享方式**
+
+- **Exclusive**（独占）：只有一个线程能执行，如ReentrantLock。又可分为公平锁和非公平锁：
+  - 公平锁：按照线程在队列中的排队顺序，先到者先拿到锁
+  - 非公平锁：当线程要获取锁时，无视队列顺序直接去抢锁，谁抢到就是谁的
+- **Share**（共享）：多个线程可同时执行，如Semaphore/CountDownLatch。Semaphore、CountDownLatch、 CyclicBarrier、ReadWriteLock 我们都会在后面讲到。
+
+ReentrantReadWriteLock 可以看成是组合式，因为ReentrantReadWriteLock也就是读写锁允许多个线程同时对某一资源进行读。
+
+不同的自定义同步器争用共享资源的方式也不同。自定义同步器在实现时只需要实现共享资源 state 的获取与释放方式即可，至于具体线程等待队列的维护（如获取资源失败入队/唤醒出队等），AQS已经在顶层实现好了。
+
+###### 18.4 AQS底层使用了模板方法模式
+
+同步器的设计是基于模板方法模式的，如果需要自定义同步器一般的方式是这样（模板方法模式很经典的一个应用）：
+
+1. 使用者继承AbstractQueuedSynchronizer并重写指定的方法。（这些重写方法很简单，无非是对于共享资源state的获取和释放）
+2. 将AQS组合在自定义同步组件的实现中，并调用其模板方法，而这些模板方法会调用使用者重写的方法。
+
+这和我们以往通过实现接口的方式有很大区别，这是模板方法模式很经典的一个运用。
+
+**AQS使用了模板方法模式，自定义同步器时需要重写下面几个AQS提供的模板方法：**
+
+```java 
+isHeldExclusively()//该线程是否正在独占资源。只有用到condition才需要去实现它。
+tryAcquire(int)//独占方式。尝试获取资源，成功则返回true，失败则返回false。
+tryRelease(int)//独占方式。尝试释放资源，成功则返回true，失败则返回false。
+tryAcquireShared(int)//共享方式。尝试获取资源。负数表示失败；0表示成功，但没有剩余可用资源；正数表示成功，且有剩余资源。
+tryReleaseShared(int)//共享方式。尝试释放资源，成功则返回true，失败则返回false。
+```
+
+默认情况下，每个方法都抛出 `UnsupportedOperationException`。 这些方法的实现必须是内部线程安全的，并且通常应该简短而不是阻塞。AQS类中的其他方法都是final ，所以无法被其他类使用，只有这几个方法可以被其他类使用。
+
+以ReentrantLock为例，state初始化为0，表示未锁定状态。A线程lock()时，会调用tryAcquire()独占该锁并将state+1。此后，其他线程再tryAcquire()时就会失败，直到A线程unlock()到state=0（即释放锁）为止，其它线程才有机会获取该锁。当然，释放锁之前，A线程自己是可以重复获取此锁的（state会累加），这就是可重入的概念。但要注意，获取多少次就要释放多么次，这样才能保证state是能回到零态的。
+
+再以CountDownLatch以例，任务分为N个子线程去执行，state也初始化为N（注意N要与线程个数一致）。这N个子线程是并行执行的，每个子线程执行完后countDown()一次，state会CAS(Compare and Swap)减1。等到所有子线程都执行完后(即state=0)，会unpark()主调用线程，然后主调用线程就会从await()函数返回，继续后余动作。
+
+一般来说，自定义同步器要么是独占方法，要么是共享方式，他们也只需实现`tryAcquire-tryRelease`、`tryAcquireShared-tryReleaseShared`中的一种即可。但AQS也支持自定义同步器同时实现独占和共享两种方式，如`ReentrantReadWriteLock`。
+
+###### 18.5 AQS 组件总结
+
+- **Semaphore(信号量)-允许多个线程同时访问：** synchronized 和 ReentrantLock 都是一次只允许一个线程访问某个资源，Semaphore(信号量)可以指定多个线程同时访问某个资源。
+
+- **CountDownLatch （倒计时器）：** CountDownLatch是一个同步工具类，用来协调多个线程之间的同步。这个工具通常用来控制线程等待，它可以让某一个线程等待直到倒计时结束，再开始执行。
+
+   **CountDownLatch 的三种典型用法**
+
+  ①某一线程在开始运行前等待n个线程执行完毕。将 CountDownLatch 的计数器初始化为n ：`new CountDownLatch(n) `，每当一个任务线程执行完毕，就将计数器减1 `countdownlatch.countDown()`，当计数器的值变为0时，在`CountDownLatch上 await()` 的线程就会被唤醒。一个典型应用场景就是启动一个服务时，主线程需要等待多个组件加载完毕，之后再继续执行。
+
+  ②实现多个线程开始执行任务的最大并行性。注意是并行性，不是并发，强调的是多个线程在某一时刻同时开始执行。类似于赛跑，将多个线程放到起点，等待发令枪响，然后同时开跑。做法是初始化一个共享的 `CountDownLatch` 对象，将其计数器初始化为 1 ：`new CountDownLatch(1) `，多个线程在开始执行任务前首先 `coundownlatch.await()`，当主线程调用 countDown() 时，计数器变为0，多个线程同时被唤醒。
+
+  ③死锁检测：一个非常方便的使用场景是，你可以使用n个线程访问共享资源，在每次测试阶段的线程数目是不同的，并尝试产生死锁。
+
+  **CountDownLatch 的使用示例**
+
+  ```java
+  /**
+   * 
+   * @author SnailClimb
+   * @date 2018年10月1日
+   * @Description: CountDownLatch 使用方法示例
+   */
+  public class CountDownLatchExample1 {
+    // 请求的数量
+    private static final int threadCount = 550;
+  
+    public static void main(String[] args) throws InterruptedException {
+      // 创建一个具有固定线程数量的线程池对象（如果这里线程池的线程数量给太少的话你会发现执行的很慢）
+      ExecutorService threadPool = Executors.newFixedThreadPool(300);
+      final CountDownLatch countDownLatch = new CountDownLatch(threadCount);
+      for (int i = 0; i < threadCount; i++) {
+        final int threadnum = i;
+        threadPool.execute(() -> {// Lambda 表达式的运用
+          try {
+            test(threadnum);
+          } catch (InterruptedException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+          } finally {
+            countDownLatch.countDown();// 表示一个请求已经被完成
+          }
+  
+        });
+      }
+      countDownLatch.await();
+      threadPool.shutdown();
+      System.out.println("finish");
+    }
+  
+    public static void test(int threadnum) throws InterruptedException {
+      Thread.sleep(1000);// 模拟请求的耗时操作
+      System.out.println("threadnum:" + threadnum);
+      Thread.sleep(1000);// 模拟请求的耗时操作
+    }
+  }
+  ```
+
+  上面的代码中，我们定义了请求的数量为550，当这550个请求被处理完成之后，才会执行`System.out.println("finish");`。
+
+  与CountDownLatch的第一次交互是主线程等待其他线程。主线程必须在启动其他线程后立即调用CountDownLatch.await()方法。这样主线程的操作就会在这个方法上阻塞，直到其他线程完成各自的任务。
+
+  其他N个线程必须引用闭锁对象，因为他们需要通知CountDownLatch对象，他们已经完成了各自的任务。这种通知机制是通过 CountDownLatch.countDown()方法来完成的；每调用一次这个方法，在构造函数中初始化的count值就减1。所以当N个线程都调 用了这个方法，count的值等于0，然后主线程就能通过await()方法，恢复执行自己的任务。
+
+  **CountDownLatch 的不足**:
+
+  CountDownLatch是一次性的，计数器的值只能在构造方法中初始化一次，之后没有任何机制再次对其设置值，当CountDownLatch使用完毕后，它不能再次被使用。
+
+- **CyclicBarrier(循环栅栏)：** CyclicBarrier 和 CountDownLatch 非常类似，它也可以实现线程间的技术等待，但是它的功能比 CountDownLatch 更加复杂和强大。主要应用场景和 CountDownLatch 类似。CyclicBarrier 的字面意思是可循环使用（Cyclic）的屏障（Barrier）。它要做的事情是，让一组线程到达一个屏障（也可以叫同步点）时被阻塞，直到最后一个线程到达屏障时，屏障才会开门，所有被屏障拦截的线程才会继续干活。CyclicBarrier默认的构造方法是 CyclicBarrier(int parties)，其参数表示屏障拦截的线程数量，每个线程调用await()方法告诉 CyclicBarrier 我已经到达了屏障，然后当前线程被阻塞。
+
+  **CyclicBarrier 的应用场景**
+
+  CyclicBarrier 可以用于多线程计算数据，最后合并计算结果的应用场景。比如我们用一个Excel保存了用户所有银行流水，每个Sheet保存一个帐户近一年的每笔银行流水，现在需要统计用户的日均银行流水，先用多线程处理每个sheet里的银行流水，都执行完之后，得到每个sheet的日均银行流水，最后，再用barrierAction用这些线程的计算结果，计算出整个Excel的日均银行流水。
+
+  **CyclicBarrier 的使用示例**
+
+  示例1：
+
+  ```java
+  /**
+   * 
+   * @author Snailclimb
+   * @date 2018年10月1日
+   * @Description: 测试 CyclicBarrier 类中带参数的 await() 方法
+   */
+  public class CyclicBarrierExample2 {
+    // 请求的数量
+    private static final int threadCount = 550;
+    // 需要同步的线程数量
+    private static final CyclicBarrier cyclicBarrier = new CyclicBarrier(5);
+  
+    public static void main(String[] args) throws InterruptedException {
+      // 创建线程池
+      ExecutorService threadPool = Executors.newFixedThreadPool(10);
+  
+      for (int i = 0; i < threadCount; i++) {
+        final int threadNum = i;
+        Thread.sleep(1000);
+        threadPool.execute(() -> {
+          try {
+            test(threadNum);
+          } catch (InterruptedException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+          } catch (BrokenBarrierException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+          }
+        });
+      }
+      threadPool.shutdown();
+    }
+  
+    public static void test(int threadnum) throws InterruptedException, BrokenBarrierException {
+      System.out.println("threadnum:" + threadnum + "is ready");
+      try {
+        /**等待60秒，保证子线程完全执行结束*/  
+        cyclicBarrier.await(60, TimeUnit.SECONDS);
+      } catch (Exception e) {
+        System.out.println("-----CyclicBarrierException------");
+      }
+      System.out.println("threadnum:" + threadnum + "is finish");
+    }
+  
+  }
+  ```
+
+  运行结果，如下：
+
+  ```java
+  threadnum:0is ready
+  threadnum:1is ready
+  threadnum:2is ready
+  threadnum:3is ready
+  threadnum:4is ready
+  threadnum:4is finish
+  threadnum:0is finish
+  threadnum:1is finish
+  threadnum:2is finish
+  threadnum:3is finish
+  threadnum:5is ready
+  threadnum:6is ready
+  threadnum:7is ready
+  threadnum:8is ready
+  threadnum:9is ready
+  threadnum:9is finish
+  threadnum:5is finish
+  threadnum:8is finish
+  threadnum:7is finish
+  threadnum:6is finish
+  ......
+  ```
+
+  可以看到当线程数量也就是请求数量达到我们定义的 5 个的时候， `await`方法之后的方法才被执行。
+
+  另外，CyclicBarrier还提供一个更高级的构造函数`CyclicBarrier(int parties, Runnable barrierAction)`，用于在线程到达屏障时，优先执行`barrierAction`，方便处理更复杂的业务场景。示例代码如下：
+
+  ```java
+  /**
+   * 
+   * @author SnailClimb
+   * @date 2018年10月1日
+   * @Description: 新建 CyclicBarrier 的时候指定一个 Runnable
+   */
+  public class CyclicBarrierExample3 {
+    // 请求的数量
+    private static final int threadCount = 550;
+    // 需要同步的线程数量
+    private static final CyclicBarrier cyclicBarrier = new CyclicBarrier(5, () -> {
+      System.out.println("------当线程数达到之后，优先执行------");
+    });
+  
+    public static void main(String[] args) throws InterruptedException {
+      // 创建线程池
+      ExecutorService threadPool = Executors.newFixedThreadPool(10);
+  
+      for (int i = 0; i < threadCount; i++) {
+        final int threadNum = i;
+        Thread.sleep(1000);
+        threadPool.execute(() -> {
+          try {
+            test(threadNum);
+          } catch (InterruptedException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+          } catch (BrokenBarrierException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+          }
+        });
+      }
+      threadPool.shutdown();
+    }
+  
+    public static void test(int threadnum) throws InterruptedException, BrokenBarrierException {
+      System.out.println("threadnum:" + threadnum + "is ready");
+      cyclicBarrier.await();
+      System.out.println("threadnum:" + threadnum + "is finish");
+    }
+  
+  }
+  ```
+
+  运行结果，如下：
+
+  ```java
+  threadnum:0is ready
+  threadnum:1is ready
+  threadnum:2is ready
+  threadnum:3is ready
+  threadnum:4is ready
+  ------当线程数达到之后，优先执行------
+  threadnum:4is finish
+  threadnum:0is finish
+  threadnum:2is finish
+  threadnum:1is finish
+  threadnum:3is finish
+  threadnum:5is ready
+  threadnum:6is ready
+  threadnum:7is ready
+  threadnum:8is ready
+  threadnum:9is ready
+  ------当线程数达到之后，优先执行------
+  threadnum:9is finish
+  threadnum:5is finish
+  threadnum:6is finish
+  threadnum:8is finish
+  threadnum:7is finish
+  ......
+  ```
+
+###### 18.6 CyclicBarrier和CountDownLatch的区别
+
+CountDownLatch是计数器，只能使用一次，而CyclicBarrier的计数器提供reset功能，可以多次使用。但是我不那么认为它们之间的区别仅仅就是这么简单的一点。我们来从jdk作者设计的目的来看，javadoc是这么描述它们的：
+
+> CountDownLatch: A synchronization aid that allows one or more threads to wait until a set of operations being performed in other threads completes.(CountDownLatch: 一个或者多个线程，等待其他多个线程完成某件事情之后才能执行；) CyclicBarrier : A synchronization aid that allows a set of threads to all wait for each other to reach a common barrier point.(CyclicBarrier : 多个线程互相等待，直到到达同一个同步点，再继续一起执行。)
+
+对于CountDownLatch来说，重点是“一个线程（多个线程）等待”，而其他的N个线程在完成“某件事情”之后，可以终止，也可以等待。而对于CyclicBarrier，重点是多个线程，在任意一个线程没有完成，所有的线程都必须等待。
+
+CountDownLatch是计数器，线程完成一个记录一个，只不过计数不是递增而是递减，而CyclicBarrier更像是一个阀门，需要所有线程都到达，阀门才能打开，然后继续执行。
+
+[![CyclicBarrier和CountDownLatch的区别](https://camo.githubusercontent.com/5c19d9e66ffaf3d7193b01948279db9b9b3b98d3/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f4a6176612532302545372541382538422545352542412538462545352539312539382545352542462538352545352541342538372545462542432539412545352542392542362545352538462539312545372539462541352545382541462538362545372542332542422545372542422539462545362538302542422545372542422539332f4151533333332e706e67)](https://camo.githubusercontent.com/5c19d9e66ffaf3d7193b01948279db9b9b3b98d3/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f4a6176612532302545372541382538422545352542412538462545352539312539382545352542462538352545352541342538372545462542432539412545352542392542362545352538462539312545372539462541352545382541462538362545372542332542422545372542422539462545362538302542422545372542422539332f4151533333332e706e67)
+
+### 二、并发容器总结
+
+JDK提供的这些容器大部分在 `java.util.concurrent` 包中。
+
+- **ConcurrentHashMap:** 线程安全的HashMap
+- **CopyOnWriteArrayList:** 线程安全的List，在读多写少的场合性能非常好，远远好于Vector.
+- **ConcurrentLinkedQueue:** 高效的并发队列，使用链表实现。可以看做一个线程安全的 LinkedList，这是一个非阻塞队列。
+- **BlockingQueue:** 这是一个接口，JDK内部通过链表、数组等方式实现了这个接口。表示阻塞队列，非常适合用于作为数据共享的通道。
+- **ConcurrentSkipListMap:** 跳表的实现。这是一个Map，使用跳表的数据结构进行快速查找
+
+#### 1.ConcurrentHashMap
+
+我们知道 HashMap 不是线程安全的，在并发场景下如果要保证一种可行的方式是使用 `Collections.synchronizedMap()`方法来包装我们的 HashMap。但这是通过使用一个全局的锁来同步不同线程间的并发访问，因此会带来不可忽视的性能问题。
+
+所以就有了 HashMap 的线程安全版本—— ConcurrentHashMap 的诞生。在ConcurrentHashMap中，无论是读操作还是写操作都能保证很高的性能：在进行读操作时(几乎)不需要加锁，而在写操作时通过锁分段技术只对所操作的段加锁而不影响客户端对其它段的访问。
+
+关于 ConcurrentHashMap 相关问题，我在 [《这几道Java集合框架面试题几乎必问》](https://github.com/Snailclimb/JavaGuide/blob/master/docs/java/Java集合框架常见面试题总结.md) 这篇文章中已经提到过。下面梳理一下关于 ConcurrentHashMap 比较重要的问题：
+
+##### 1.1 ConcurrentHashMap 和 Hashtable 的区别？
+
+ConcurrentHashMap 和 Hashtable 的区别主要体现在实现线程安全的方式上不同。
+
+- **底层数据结构：** JDK1.7的 ConcurrentHashMap 底层采用 **分段的数组+链表** 实现，JDK1.8 采用的数据结构跟HashMap1.8的结构一样，数组+链表/红黑二叉树。Hashtable 和 JDK1.8 之前的 HashMap 的底层数据结构类似都是采用 **数组+链表** 的形式，数组是 HashMap 的主体，链表则是主要为了解决哈希冲突而存在的；
+
+- **实现线程安全的方式（重要）：** ① **在JDK1.7的时候，ConcurrentHashMap（分段锁）** 对整个桶数组进行了分割分段(Segment)，每一把锁只锁容器其中一部分数据，多线程访问容器里不同数据段的数据，就不会存在锁竞争，提高并发访问率。 **到了 JDK1.8 的时候已经摒弃了Segment的概念，而是直接用 Node 数组+链表+红黑树的数据结构来实现，并发控制使用 synchronized 和 CAS 来操作。（JDK1.6以后 对 synchronized锁做了很多优化）** 整个看起来就像是优化过且线程安全的 HashMap，虽然在JDK1.8中还能看到 Segment 的数据结构，但是已经简化了属性，只是为了兼容旧版本；② **Hashtable(同一把锁)** :使用 synchronized 来保证线程安全，效率非常低下。当一个线程访问同步方法时，其他线程也访问同步方法，可能会进入阻塞或轮询状态，如使用 put 添加元素，另一个线程不能使用 put 添加元素，也不能使用 get，竞争会越来越激烈效率越低。[![HashTable全表锁](https://camo.githubusercontent.com/60920968c0e19878ca2a3a153cbe4872f950b571/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f486173685461626c652545352538352541382545382541312541382545392539342538312e706e67)](https://camo.githubusercontent.com/60920968c0e19878ca2a3a153cbe4872f950b571/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f486173685461626c652545352538352541382545382541312541382545392539342538312e706e67)
+
+  **JDK1.7的ConcurrentHashMap：**
+
+  [![JDK1.7的ConcurrentHashMap](https://camo.githubusercontent.com/092aae16c3a38854b4cea8b7e42dc6720df4441f/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f436f6e63757272656e74486173684d61702545352538382538362545362541452542352545392539342538312e6a7067)](https://camo.githubusercontent.com/092aae16c3a38854b4cea8b7e42dc6720df4441f/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f436f6e63757272656e74486173684d61702545352538382538362545362541452542352545392539342538312e6a7067)
+
+  **JDK1.8的ConcurrentHashMap（TreeBin: 红黑二叉树节点 Node: 链表节点）：**
+
+  [![JDK1.8的ConcurrentHashMap](https://camo.githubusercontent.com/b823c5f2cf18e7e27da70409d2b5e18fed820364/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f4a444b312e382d436f6e63757272656e74486173684d61702d5374727563747572652e6a7067)](https://camo.githubusercontent.com/b823c5f2cf18e7e27da70409d2b5e18fed820364/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f4a444b312e382d436f6e63757272656e74486173684d61702d5374727563747572652e6a7067)
+
+##### 1.2 ConcurrentHashMap线程安全的具体实现方式/底层具体实现
+
+**JDK1.7（上面有示意图）**
+
+首先将数据分为一段一段的存储，然后给每一段数据配一把锁，当一个线程占用锁访问其中一个段数据时，其他段的数据也能被其他线程访问。
+
+**ConcurrentHashMap 是由 Segment 数组结构和 HashEntry 数组结构组成**。
+
+Segment 实现了 ReentrantLock,所以 Segment 是一种可重入锁，扮演锁的角色。HashEntry 用于存储键值对数据。
+
+```
+static class Segment<K,V> extends ReentrantLock implements Serializable {
+}
+```
+
+一个 ConcurrentHashMap 里包含一个 Segment 数组。Segment 的结构和HashMap类似，是一种数组和链表结构，一个 Segment 包含一个 HashEntry 数组，每个 HashEntry 是一个链表结构的元素，每个 Segment 守护着一个HashEntry数组里的元素，当对 HashEntry 数组的数据进行修改时，必须首先获得对应的 Segment的锁。
+
+**JDK1.8 （上面有示意图）**
+
+ConcurrentHashMap取消了Segment分段锁，采用CAS和synchronized来保证并发安全。数据结构跟HashMap1.8的结构类似，数组+链表/红黑二叉树。Java 8在链表长度超过一定阈值（8）时将链表（寻址时间复杂度为O(N)）转换为红黑树（寻址时间复杂度为O(log(N))）
+
+synchronized只锁定当前链表或红黑二叉树的首节点，这样只要hash不冲突，就不会产生并发，效率又提升N倍。
+
+
+
+#### 2.CopyOnWriteArrayList
+
+##### 2.1 CopyOnWriteArrayList 简介
+
+```java
+public class CopyOnWriteArrayList<E>
+extends Object
+implements List<E>, RandomAccess, Cloneable, Serializable
+```
+
+在很多应用场景中，读操作可能会远远大于写操作。由于读操作根本不会修改原有的数据，因此对于每次读取都进行加锁其实是一种资源浪费。我们应该允许多个线程同时访问List的内部数据，毕竟读取操作是安全的。这和我们之前在多线程章节讲过 `ReentrantReadWriteLock` 读写锁的思想非常类似，也就是读读共享、写写互斥、读写互斥、写读互斥。JDK中提供了 `CopyOnWriteArrayList` 类比相比于在读写锁的思想又更进一步。为了将读取的性能发挥到极致，`CopyOnWriteArrayList` 读取是完全不用加锁的，并且更厉害的是：写入也不会阻塞读取操作。只有写入和写入之间需要进行同步等待。这样一来，读操作的性能就会大幅度提升。
+
+##### 2.2 CopyOnWriteArrayList 是如何做到的？
+
+`CopyOnWriteArrayList` 类的所有可变操作（add，set等等）都是通过创建底层数组的新副本来实现的。当 List 需要被修改的时候，我并不修改原有内容，而是对原有数据进行一次复制，将修改的内容写入副本。写完之后，再将修改完的副本替换原来的数据，这样就可以保证写操作不会影响读操作了。
+
+从 `CopyOnWriteArrayList` 的名字就能看出`CopyOnWriteArrayList` 是满足`CopyOnWrite` 的ArrayList，所谓`CopyOnWrite` 也就是说：在计算机，如果你想要对一块内存进行修改时，我们不在原有内存块中进行写操作，而是将内存拷贝一份，在新的内存中进行写操作，写完之后呢，就将指向原来内存指针指向新的内存，原来的内存就可以被回收掉了。
+
+##### 2.3 CopyOnWriteArrayList 读取和写入源码简单分析
+
+###### 2.3.1 CopyOnWriteArrayList 读取操作的实现
+
+读取操作没有任何同步控制和锁操作，理由就是内部数组 array 不会发生修改，只会被另外一个 array 替换，因此可以保证数据安全。
+
+```java
+    /** The array, accessed only via getArray/setArray. */
+    private transient volatile Object[] array;
+    public E get(int index) {
+        return get(getArray(), index);
+    }
+    @SuppressWarnings("unchecked")
+    private E get(Object[] a, int index) {
+        return (E) a[index];
+    }
+    final Object[] getArray() {
+        return array;
+    }
+```
+
+###### 2.3.2 CopyOnWriteArrayList 写入操作的实现
+
+CopyOnWriteArrayList 写入操作 add() 方法在添加集合的时候加了锁，保证了同步，避免了多线程写的时候会 copy 出多个副本出来。
+
+```java
+    /**
+     * Appends the specified element to the end of this list.
+     *
+     * @param e element to be appended to this list
+     * @return {@code true} (as specified by {@link Collection#add})
+     */
+    public boolean add(E e) {
+        final ReentrantLock lock = this.lock;
+        lock.lock();//加锁
+        try {
+            Object[] elements = getArray();
+            int len = elements.length;
+            Object[] newElements = Arrays.copyOf(elements, len + 1);//拷贝新数组
+            newElements[len] = e;
+            setArray(newElements);
+            return true;
+        } finally {
+            lock.unlock();//释放锁
+        }
+    }
+```
+
+
+
+#### 3.ConcurrentLinkedQueue
+
+Java提供的线程安全的 Queue 可以分为**阻塞队列**和**非阻塞队列**，其中阻塞队列的典型例子是 BlockingQueue，非阻塞队列的典型例子是ConcurrentLinkedQueue，在实际应用中要根据实际需要选用阻塞队列或者非阻塞队列。 **阻塞队列可以通过加锁来实现，非阻塞队列可以通过 CAS 操作实现。**
+
+从名字可以看出，`ConcurrentLinkedQueue`这个队列使用链表作为其数据结构．ConcurrentLinkedQueue 应该算是在高并发环境中性能最好的队列了。它之所有能有很好的性能，是因为其内部复杂的实现。
+
+ConcurrentLinkedQueue 内部代码我们就不分析了，大家知道ConcurrentLinkedQueue 主要使用 CAS 非阻塞算法来实现线程安全就好了。
+
+ConcurrentLinkedQueue 适合在对性能要求相对较高，同时对队列的读写存在多个线程同时进行的场景，即如果对队列加锁的成本较高则适合使用无锁的ConcurrentLinkedQueue来替代。
+
+#### 4.BlockingQueue
+
+面我们己经提到了 ConcurrentLinkedQueue 作为高性能的非阻塞队列。下面我们要讲到的是阻塞队列——BlockingQueue。阻塞队列（BlockingQueue）被广泛使用在“生产者-消费者”问题中，其原因是BlockingQueue提供了可阻塞的插入和移除的方法。当队列容器已满，生产者线程会被阻塞，直到队列未满；当队列容器为空时，消费者线程会被阻塞，直至队列非空时为止。
+
+BlockingQueue 是一个接口，继承自 Queue，所以其实现类也可以作为 Queue 的实现来使用，而 Queue 又继承自 Collection 接口。下面是 BlockingQueue 的相关实现类:
+
+[![BlockingQueue 的实现类](https://camo.githubusercontent.com/e5c9a5d8158376ce80e912cba95ba4919e4377fc/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d31322d392f35313632323236382e6a7067)](https://camo.githubusercontent.com/e5c9a5d8158376ce80e912cba95ba4919e4377fc/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d31322d392f35313632323236382e6a7067)
+
+##### 4.1 ArrayBlockingQueue
+
+**ArrayBlockingQueue** 是 BlockingQueue 接口的有界队列实现类，底层采用**数组**来实现。ArrayBlockingQueue一旦创建，容量不能改变。其并发控制采用可重入锁来控制，不管是插入操作还是读取操作，都需要获取到锁才能进行操作。当队列容量满时，尝试将元素放入队列将导致操作阻塞;尝试从一个空队列中取一个元素也会同样阻塞。
+
+ArrayBlockingQueue 默认情况下不能保证线程访问队列的公平性，所谓公平性是指严格按照线程等待的绝对时间顺序，即最先等待的线程能够最先访问到 ArrayBlockingQueue。而非公平性则是指访问 ArrayBlockingQueue 的顺序不是遵守严格的时间顺序，有可能存在，当 ArrayBlockingQueue 可以被访问时，长时间阻塞的线程依然无法访问到 ArrayBlockingQueue。如果保证公平性，通常会降低吞吐量。如果需要获得公平性的 ArrayBlockingQueue，可采用如下代码：
+
+```JAVA
+private static ArrayBlockingQueue<Integer> blockingQueue = new ArrayBlockingQueue<Integer>(10,true);
+```
+
+##### 4.2 LinkedBlockingQueue
+
+**LinkedBlockingQueue** 底层基于**单向链表**实现的阻塞队列，可以当做无界队列也可以当做有界队列来使用，同样满足FIFO的特性，与ArrayBlockingQueue 相比起来具有更高的吞吐量，为了防止 LinkedBlockingQueue 容量迅速增，损耗大量内存。通常在创建LinkedBlockingQueue 对象时，会指定其大小，如果未指定，容量等于Integer.MAX_VALUE。
+
+**相关构造方法:**
+
+```java
+    /**
+     *某种意义上的无界队列
+     * Creates a {@code LinkedBlockingQueue} with a capacity of
+     * {@link Integer#MAX_VALUE}.
+     */
+    public LinkedBlockingQueue() {
+        this(Integer.MAX_VALUE);
+    }
+
+    /**
+     *有界队列
+     * Creates a {@code LinkedBlockingQueue} with the given (fixed) capacity.
+     *
+     * @param capacity the capacity of this queue
+     * @throws IllegalArgumentException if {@code capacity} is not greater
+     *         than zero
+     */
+    public LinkedBlockingQueue(int capacity) {
+        if (capacity <= 0) throw new IllegalArgumentException();
+        this.capacity = capacity;
+        last = head = new Node<E>(null);
+    }
+```
+
+##### 4.3 PriorityBlockingQueue
+
+**PriorityBlockingQueue** 是一个支持优先级的**无界阻塞队列**。默认情况下元素采用自然顺序进行排序，也可以通过自定义类实现 `compareTo()` 方法来指定元素排序规则，或者初始化时通过构造器参数 `Comparator` 来指定排序规则。
+
+PriorityBlockingQueue 并发控制采用的是 **ReentrantLock**，队列为无界队列（ArrayBlockingQueue 是有界队列，LinkedBlockingQueue 也可以通过在构造函数中传入 capacity 指定队列最大的容量，但是 PriorityBlockingQueue 只能指定初始的队列大小，后面插入元素的时候，**如果空间不够的话会自动扩容**）。
+
+简单地说，它就是 PriorityQueue 的线程安全版本。不可以插入 null 值，同时，插入队列的对象必须是可比较大小的（comparable），否则报 ClassCastException 异常。它的插入操作 put 方法不会 block，因为它是无界队列（take 方法在队列为空的时候会阻塞）。
+
+#### 5. ConcurrentSkipListMap
+
+**为了引出ConcurrentSkipListMap，先带着大家简单理解一下跳表。**
+
+对于一个单链表，即使链表是有序的，如果我们想要在其中查找某个数据，也只能从头到尾遍历链表，这样效率自然就会很低，跳表就不一样了。跳表是一种可以用来快速查找的数据结构，有点类似于平衡树。它们都可以对元素进行快速的查找。但一个重要的区别是：对平衡树的插入和删除往往很可能导致平衡树进行一次全局的调整。而对跳表的插入和删除只需要对整个数据结构的局部进行操作即可。这样带来的好处是：在高并发的情况下，你会需要一个全局锁来保证整个平衡树的线程安全。而对于跳表，你只需要部分锁即可。这样，在高并发环境下，你就可以拥有更好的性能。而就查询的性能而言，跳表的时间复杂度也是 **O(logn)** 所以在并发数据结构中，JDK 使用跳表来实现一个 Map。
+
+跳表的本质是同时维护了多个链表，并且链表是分层的，
+
+[![2级索引跳表](https://camo.githubusercontent.com/11e7cbe718a70a81c42c37a13a257f91ef48dfd7/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d31322d392f39333636363231372e6a7067)](https://camo.githubusercontent.com/11e7cbe718a70a81c42c37a13a257f91ef48dfd7/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d31322d392f39333636363231372e6a7067)
+
+最低层的链表维护了跳表内所有的元素，每上面一层链表都是下面一层的子集。
+
+跳表内的所有链表的元素都是排序的。查找时，可以从顶级链表开始找。一旦发现被查找的元素大于当前链表中的取值，就会转入下一层链表继续找。这也就是说在查找过程中，搜索是跳跃式的。如上图所示，在跳表中查找元素18。
+
+[![在跳表中查找元素18](https://camo.githubusercontent.com/111e9bd4936833f774e1a11a2e7bead849ec0ab2/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d31322d392f33323030353733382e6a7067)](https://camo.githubusercontent.com/111e9bd4936833f774e1a11a2e7bead849ec0ab2/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d31322d392f33323030353733382e6a7067)
+
+查找18 的时候原来需要遍历 18 次，现在只需要 7 次即可。针对链表长度比较大的时候，构建索引查找效率的提升就会非常明显。
+
+从上面很容易看出，**跳表是一种利用空间换时间的算法。**
+
+使用跳表实现Map 和使用哈希算法实现Map的另外一个不同之处是：哈希并不会保存元素的顺序，而跳表内所有的元素都是排序的。因此在对跳表进行遍历时，你会得到一个有序的结果。所以，如果你的应用需要有序性，那么跳表就是你不二的选择。JDK 中实现这一数据结构的类是ConcurrentSkipListMap。
+
+
+
+### 三、乐观锁与悲观锁
+
+#### 1.悲观锁
+
+总是假设最坏的情况，每次去拿数据的时候都认为别人会修改，所以每次在拿数据的时候都会上锁，这样别人想拿这个数据就会阻塞直到它拿到锁（**共享资源每次只给一个线程使用，其它线程阻塞，用完后再把资源转让给其它线程**）。传统的关系型数据库里边就用到了很多这种锁机制，比如行锁，表锁等，读锁，写锁等，都是在做操作之前先上锁。Java中`synchronized`和`ReentrantLock`等独占锁就是悲观锁思想的实现。
+
+#### 2.乐观锁
+
+总是假设最好的情况，每次去拿数据的时候都认为别人不会修改，所以不会上锁，但是在更新的时候会判断一下在此期间别人有没有去更新这个数据，可以使用版本号机制和CAS算法实现。**乐观锁适用于多读的应用类型，这样可以提高吞吐量**，像数据库提供的类似于**write_condition机制**，其实都是提供的乐观锁。在Java中`java.util.concurrent.atomic`包下面的**原子变量类**就是使用了乐观锁的一种实现方式**CAS**实现的。
+
+#### 3.两种锁的使用场景
+
+从上面对两种锁的介绍，我们知道两种锁各有优缺点，不可认为一种好于另一种，像**乐观锁适用于写比较少的情况下（多读场景）**，即冲突真的很少发生的时候，这样可以省去了锁的开销，加大了系统的整个吞吐量。但如果是多写的情况，一般会经常产生冲突，这就会导致上层应用会不断的进行retry，这样反倒是降低了性能，所以**一般多写的场景下用悲观锁就比较合适。**
+
+#### 4.乐观锁常见的两种实现方式
+
+> **乐观锁一般会使用版本号机制或CAS算法实现。**
+
+##### 1. 版本号机制
+
+一般是在数据表中加上一个数据版本号version字段，表示数据被修改的次数，当数据被修改时，version值会加一。当线程A要更新数据值时，在读取数据的同时也会读取version值，在提交更新时，若刚才读取到的version值为当前数据库中的version值相等时才更新，否则重试更新操作，直到更新成功。
+
+**举一个简单的例子：** 假设数据库中帐户信息表中有一个 version 字段，当前值为 1 ；而当前帐户余额字段（ balance ）为 $100 。
+
+1. 操作员 A 此时将其读出（ version=1 ），并从其帐户余额中扣除 $50（ $100-$50 ）。
+2. 在操作员 A 操作的过程中，操作员B 也读入此用户信息（ version=1 ），并从其帐户余额中扣除 $20 （ $100-$20 ）。
+3. 操作员 A 完成了修改工作，将数据版本号加一（ version=2 ），连同帐户扣除后余额（ balance=$50 ），提交至数据库更新，此时由于提交数据版本大于数据库记录当前版本，数据被更新，数据库记录 version 更新为 2 。
+4. 操作员 B 完成了操作，也将版本号加一（ version=2 ）试图向数据库提交数据（ balance=$80 ），但此时比对数据库记录版本时发现，操作员 B 提交的数据版本号为 2 ，数据库记录当前版本也为 2 ，不满足 “ 提交版本必须大于记录当前版本才能执行更新 “ 的乐观锁策略，因此，操作员 B 的提交被驳回。
+
+这样，就避免了操作员 B 用基于 version=1 的旧数据修改的结果覆盖操作员A 的操作结果的可能。
+
+##### 2. CAS算法
+
+即**compare and swap（比较与交换）**，是一种有名的**无锁算法**。无锁编程，即不使用锁的情况下实现多线程之间的变量同步，也就是在没有线程被阻塞的情况下实现变量的同步，所以也叫非阻塞同步（Non-blocking Synchronization）。**CAS算法**涉及到三个操作数
+
+- 需要读写的内存值 V
+- 进行比较的值 A
+- 拟写入的新值 B
+
+当且仅当 V 的值等于 A时，CAS通过原子方式用新值B来更新V的值，否则不会执行任何操作（比较和替换是一个原子操作）。一般情况下是一个**自旋操作**，即**不断的重试**。
+
+
+
+#### 5.乐观锁的缺点
+
+##### 5.1 ABA 问题
+
+如果一个变量V初次读取的时候是A值，并且在准备赋值的时候检查到它仍然是A值，那我们就能说明它的值没有被其他线程修改过了吗？很明显是不能的，因为在这段时间它的值可能被改为其他值，然后又改回A，那CAS操作就会误认为它从来没有被修改过。这个问题被称为CAS操作的 **"ABA"问题。**
+
+JDK 1.5 以后的 `AtomicStampedReference 类`就提供了此种能力，其中的 `compareAndSet 方法`就是首先检查当前引用是否等于预期引用，并且当前标志是否等于预期标志，如果全部相等，则以原子方式将该引用和该标志的值设置为给定的更新值。
+
+##### 5.2 循环时间长开销大
+
+**自旋CAS（也就是不成功就一直循环执行直到成功）如果长时间不成功，会给CPU带来非常大的执行开销。** 如果JVM能支持处理器提供的pause指令那么效率会有一定的提升，pause指令有两个作用，第一它可以延迟流水线执行指令（de-pipeline）,使CPU不会消耗过多的执行资源，延迟的时间取决于具体实现的版本，在一些处理器上延迟时间是零。第二它可以避免在退出循环的时候因内存顺序冲突（memory order violation）而引起CPU流水线被清空（CPU pipeline flush），从而提高CPU的执行效率。
+
+##### 5.3 只能保证一个共享变量的原子操作
+
+CAS 只对单个共享变量有效，当操作涉及跨多个共享变量时 CAS 无效。但是从 JDK 1.5开始，提供了`AtomicReference类`来保证引用对象之间的原子性，你可以把多个变量放在一个对象里来进行 CAS 操作.所以我们可以使用锁或者利用`AtomicReference类`把多个共享变量合并成一个共享变量来操作。
+
+#### 6.CAS与synchronized的使用情景
+
+> **简单的来说CAS适用于写比较少的情况下（多读场景，冲突一般较少），synchronized适用于写比较多的情况下（多写场景，冲突一般较多）**
+
+1. 对于资源竞争较少（线程冲突较轻）的情况，使用synchronized同步锁进行线程阻塞和唤醒切换以及用户态内核态间的切换操作额外浪费消耗cpu资源；而CAS基于硬件实现，不需要进入内核，不需要切换线程，操作自旋几率较少，因此可以获得更高的性能。
+2. 对于资源竞争严重（线程冲突严重）的情况，CAS自旋的概率会比较大，从而浪费更多的CPU资源，效率低于synchronized。
+
+补充： Java并发编程这个领域中synchronized关键字一直都是元老级的角色，很久之前很多人都会称它为 **“重量级锁”** 。但是，在JavaSE 1.6之后进行了主要包括为了减少获得锁和释放锁带来的性能消耗而引入的 **偏向锁** 和 **轻量级锁** 以及其它**各种优化**之后变得在某些情况下并不是那么重了。synchronized的底层实现主要依靠 **Lock-Free** 的队列，基本思路是 **自旋后阻塞**，**竞争切换后继续竞争锁**，**稍微牺牲了公平性，但获得了高吞吐量**。在线程冲突较少的情况下，可以获得和CAS类似的性能；而线程冲突严重的情况下，性能远高于CAS。
 
 
 
 
 
+## 容器
 
+### Java容器基础知识最常见问题
 
+#### 1.说说List,Set,Map三者的区别？
 
+- **List(对付顺序的好帮手)：** List接口存储一组不唯一（可以有多个元素引用相同的对象），有序的对象
+- **Set(注重独一无二的性质):** 不允许重复的集合。不会有多个元素引用相同的对象。
+- **Map(用Key来搜索的专家):** 使用键值对存储。Map会维护与Key有关联的值。两个Key可以引用相同的对象，但Key不能重复，典型的Key是String类型，但也可以是任何对象。
 
+#### 2.Arraylist 与 LinkedList 区别?
 
+- **1. 是否保证线程安全：** `ArrayList` 和 `LinkedList` 都是不同步的，也就是不保证线程安全；
+- **2. 底层数据结构：** `Arraylist` 底层使用的是 **Object 数组**；`LinkedList` 底层使用的是 **双向链表** 数据结构（JDK1.6之前为循环链表，JDK1.7取消了循环。注意双向链表和双向循环链表的区别，下面有介绍到！）
+- **3. 插入和删除是否受元素位置的影响：** ① **ArrayList 采用数组存储，所以插入和删除元素的时间复杂度受元素位置的影响。** 比如：执行`add(E e) `方法的时候， `ArrayList` 会默认在将指定的元素追加到此列表的末尾，这种情况时间复杂度就是O(1)。但是如果要在指定位置 i 插入和删除元素的话（`add(int index, E element) `）时间复杂度就为 O(n-i)。因为在进行上述操作的时候集合中第 i 和第 i 个元素之后的(n-i)个元素都要执行向后位/向前移一位的操作。 ② **LinkedList 采用链表存储，所以对于add(�E e)方法的插入，删除元素时间复杂度不受元素位置的影响，近似 O（1），如果是要在指定位置i插入和删除元素的话（(add(int index, E element)） 时间复杂度应为o(n))因为需要新创立一个新的链表，复制前i-1个元素并在第i位加入新的元素，最后附上n-i个元素。**
+- **4. 是否支持快速随机访问：** `LinkedList` 不支持高效的随机元素访问，而 `ArrayList` 支持。快速随机访问就是通过元素的序号快速获取元素对象(对应于`get(int index) `方法)。
+- **5. 内存空间占用：** ArrayList的空 间浪费主要体现在在list列表的结尾会预留一定的容量空间，而LinkedList的空间花费则体现在它的每一个元素都需要消耗比ArrayList更多的空间（因为要存放直接后继和直接前驱以及数据）。
 
+##### ***补充内容1:RandomAccess接口***
 
+```Java
+public interface RandomAccess {
+}
+```
 
+查看源码我们发现实际上 `RandomAccess` 接口中什么都没有定义。所以，在我看来 `RandomAccess` 接口不过是一个标识罢了。标识什么？ 标识实现这个接口的类具有随机访问功能。
 
+在 `binarySearch（`）方法中，它要判断传入的list 是否 `RamdomAccess` 的实例，如果是，调用`indexedBinarySearch（）`方法，如果不是，那么调用`iteratorBinarySearch（）`方法
 
+```Java
+    public static <T>
+    int binarySearch(List<? extends Comparable<? super T>> list, T key) {
+        if (list instanceof RandomAccess || list.size()<BINARYSEARCH_THRESHOLD)
+            return Collections.indexedBinarySearch(list, key);
+        else
+            return Collections.iteratorBinarySearch(list, key);
+    }
+```
 
+`ArrayList` 实现了 `RandomAccess` 接口， 而 `LinkedList` 没有实现。为什么呢？我觉得还是和底层数据结构有关！`ArrayList` 底层是数组，而 `LinkedList` 底层是链表。数组天然支持随机访问，时间复杂度为 O（1），所以称为快速随机访问。链表需要遍历到特定位置才能访问特定位置的元素，时间复杂度为 O（n），所以不支持快速随机访问。`ArrayList` 实现了 `RandomAccess` 接口，就表明了他具有快速随机访问功能。 `RandomAccess` 接口只是标识，并不是说 `ArrayList` 实现 `RandomAccess` 接口才具有快速随机访问功能的！
 
+**下面再总结一下 list 的遍历方式选择：**
 
+- 实现了 `RandomAccess` 接口的list，优先选择普通 for 循环 ，其次 foreach,
+- 未实现 `RandomAccess`接口的list，优先选择iterator遍历（foreach遍历底层也是通过iterator实现的,），大size的数据，千万不要使用普通for循环
 
+##### ***补充内容2:双向链表和双向循环链表：***
 
+**双向链表：** 包含两个指针，一个prev指向前一个节点，一个next指向后一个节点。
 
+**双向链表(双链表)是链表的一种。和单链表一样，双链表也是由节点组成，它的每个数据结点中都有两个指针，分别指向直接后继和直接前驱。**
 
+![img](https://images2017.cnblogs.com/blog/922236/201712/922236-20171220110011240-853997173.png)
 
+**双向循环链表：**从双向链表中的任意一个结点开始，都可以很方便地访问它的前驱结点和后继结点。一般我们都构造双向循环链表。
 
+双链表的示意图如下：
 
+![img](https://images2015.cnblogs.com/blog/632293/201703/632293-20170306150003297-951612143.png)
 
+表头为空，表头的后继节点为"节点10"(数据为10的节点)；"节点10"的后继节点是"节点20"(数据为10的节点)，"节点20"的前继节点是"节点10"；"节点20"的后继节点是"节点30"，"节点30"的前继节点是"节点20"；...；末尾节点的后继节点是表头。
 
+**双链表删除节点**
+
+**![img](https://images2015.cnblogs.com/blog/632293/201703/632293-20170306150039609-1719195275.png)**
+
+删除"节点30"
+**删除之前**："节点20"的后继节点为"节点30"，"节点30" 的前继节点为"节点20"。"节点30"的后继节点为"节点40"，"节点40" 的前继节点为"节点30"。
+**删除之后**："节点20"的后继节点为"节点40"，"节点40" 的前继节点为"节点20"。
+
+ **双链表添加节点**
+
+ ![img](https://images2015.cnblogs.com/blog/632293/201703/632293-20170306150105453-2068434988.png)
+
+在"节点10"与"节点20"之间添加"节点15"
+**添加之前**："节点10"的后继节点为"节点20"，"节点20" 的前继节点为"节点10"。
+**添加之后**："节点10"的后继节点为"节点15"，"节点15" 的前继节点为"节点10"。"节点15"的后继节点为"节点20"，"节点20" 的前继节点为"节点15"。
+
+#### 3.ArrayList 与 Vector 区别呢?为什么要用Arraylist取代Vector呢？
 
