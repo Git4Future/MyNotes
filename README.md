@@ -1256,7 +1256,7 @@ ConcurrentHashMap 和 Hashtable 的区别主要体现在实现线程安全的方
 
 Segment 实现了 ReentrantLock,所以 Segment 是一种可重入锁，扮演锁的角色。HashEntry 用于存储键值对数据。
 
-```
+```java
 static class Segment<K,V> extends ReentrantLock implements Serializable {
 }
 ```
@@ -1582,3 +1582,923 @@ public interface RandomAccess {
 
 #### 3.ArrayList 与 Vector 区别呢?为什么要用Arraylist取代Vector呢？
 
+Vector是同步的。这个类中的一些方法保证了Vector中的对象是线程安全的。而ArrayList则是异步的，因此ArrayList中的对象并不是线程安全的。因为同步的要求会影响执行的效率，所以如果你不需要线程安全的集合那么使用ArrayList是一个很好的选择，这样可以避免由于同步带来的不必要的性能开销。
+
+数据增长从内部实现机制来讲ArrayList和Vector都是使用数组(Array)来控制集合中的对象。当你向这两种类型中增加元素的时候，如果元素的数目超出了内部数组目前的长度它们都需要扩展内部数组的长度，Vector缺省情况下自动增长原来一倍的数组长度，ArrayList是原来的50%,所以最后你获得的这个集合所占的空间总是比你实际需要的要大。所以如果你要在集合中保存大量的数据那么使用Vector有一些优势，因为你可以通过设置集合的初始化大小来避免不必要的资源开销。
+
+使用模式在ArrayList和Vector中，从一个指定的位置（通过索引）查找数据或是在集合的末尾增加、移除一个元素所花费的时间是一样的，这个时间我们用O(1)表示。但是，如果在集合的其他位置增加或移除元素那么花费的时间会呈线形增长：O(n-i)，其中n代表集合中元素的个数，i代表元素增加或移除元素的索引位置。
+
+#### 4.HashMap 和 Hashtable 的区别?
+
+1. **线程是否安全：** HashMap 是非线程安全的，HashTable 是线程安全的；HashTable 内部的方法基本都经过`synchronized` 修饰。（如果你要保证线程安全的话就使用 ConcurrentHashMap 吧！）；
+2. **效率：** 因为线程安全的问题，HashMap 要比 HashTable 效率高一点。另外，HashTable 基本被淘汰，不要在代码中使用它；
+3. **对Null key 和Null value的支持：** HashMap 中，null 可以作为键，这样的键只有一个，可以有一个或多个键所对应的值为 null。但是在 HashTable 中 put 进的键值只要有一个 null，直接抛出 NullPointerException。
+4. **初始容量大小和每次扩充容量大小的不同 ：** ①创建时如果不指定容量初始值，Hashtable 默认的初始大小为11，之后每次扩充，容量变为原来的2n+1。HashMap 默认的初始化大小为16。之后每次扩充，容量变为原来的2倍。②创建时如果给定了容量初始值，那么 Hashtable 会直接使用你给定的大小，而 HashMap 会将其扩充为2的幂次方大小（HashMap 中的`tableSizeFor()`方法保证，下面给出了源代码）。也就是说 HashMap 总是使用2的幂作为哈希表的大小,后面会介绍到为什么是2的幂次方。
+5. **底层数据结构：** JDK1.8 以后的 HashMap 在解决哈希冲突时有了较大的变化，当链表长度大于阈值（默认为8）时，将链表转化为红黑树，以减少搜索时间。Hashtable 没有这样的机制。
+
+**HasMap 中带有初始容量的构造函数：**
+
+```java
+    public HashMap(int initialCapacity, float loadFactor) {
+        if (initialCapacity < 0)
+            throw new IllegalArgumentException("Illegal initial capacity: " +
+                                               initialCapacity);
+        if (initialCapacity > MAXIMUM_CAPACITY)
+            initialCapacity = MAXIMUM_CAPACITY;
+        if (loadFactor <= 0 || Float.isNaN(loadFactor))
+            throw new IllegalArgumentException("Illegal load factor: " +
+                                               loadFactor);
+        this.loadFactor = loadFactor;
+        this.threshold = tableSizeFor(initialCapacity);
+    }
+     public HashMap(int initialCapacity) {
+        this(initialCapacity, DEFAULT_LOAD_FACTOR);
+    }
+```
+
+下面这个方法保证了 HashMap 总是使用2的幂作为哈希表的大小。
+
+```java 
+    /**
+     * Returns a power of two size for the given target capacity.
+     */
+    static final int tableSizeFor(int cap) {
+        int n = cap - 1;
+        n |= n >>> 1;
+        n |= n >>> 2;
+        n |= n >>> 4;
+        n |= n >>> 8;
+        n |= n >>> 16;
+        return (n < 0) ? 1 : (n >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : n + 1;
+    }
+```
+
+#### 5.HashMap 和 HashSet区别?
+
+如果你看过 HashSet 源码的话就应该知道：HashSet 底层就是基于 HashMap 实现的。（HashSet 的源码非常非常少，因为除了 `clone() `、`writeObject()`、`readObject()`是 HashSet 自己不得不实现之外，其他方法都是直接调用 HashMap 中的方法。
+
+| HashMap                          | HashSet                                                      |
+| -------------------------------- | ------------------------------------------------------------ |
+| 实现了Map接口                    | 实现Set接口                                                  |
+| 存储键值对                       | 仅存储对象                                                   |
+| 调用 `put（）`向map中添加元素    | 调用 `add（）`方法向Set中添加元素                            |
+| HashMap使用键（Key）计算Hashcode | HashSet使用成员对象来计算hashcode值，对于两个对象来说hashcode可能相同，所以equals()方法用来判断对象的相等性 |
+
+#### 6.HashSet如何检查重复?
+
+当你把对象加入HashSet时，HashSet会先计算对象的hashcode值来判断对象加入的位置，同时也会与其他加入的对象的hashcode值作比较，如果没有相符的hashcode，HashSet会假设对象没有重复出现。但是如果发现有相同hashcode值的对象，这时会调用equals（）方法来检查hashcode相等的对象是否真的相同。如果两者相同，HashSet就不会让加入操作成功。
+
+***hashCode（）与equals（）的相关规定：***
+
+1. 如果两个对象相等，则hashcode一定也是相同的
+2. 两个对象相等,对两个equals方法返回true
+3. 两个对象有相同的hashcode值，它们也不一定是相等的
+4. 综上，equals方法被覆盖过，则hashCode方法也必须被覆盖
+5. hashCode()的默认行为是对堆上的对象产生独特值。如果没有重写hashCode()，则该class的两个对象无论如何都不会相等（即使这两个对象指向相同的数据）。
+
+***==与equals的区别?***
+
+| ==                                         |                          equals                          |
+| ------------------------------------------ | :------------------------------------------------------: |
+| 判断两个变量或实例是不是指向同一个内存空间 | equals是判断两个变量或实例所指向的内存空间的值是不是相同 |
+| ==是指对内存地址进行比较                   |             equals()是对字符串的内容进行比较             |
+| ==指引用是否相同                           |                 equals()指的是值是否相同                 |
+
+#### 7.HashMap的底层实现?
+
+**JDK1.8之前:**
+
+JDK1.8 之前 HashMap 底层是 **数组和链表** 结合在一起使用也就是 **链表散列**。HashMap 通过 key 的 hashCode 经过扰动函数处理过后得到 hash 值，然后通过 (n - 1) & hash 判断当前元素存放的位置（这里的 n 指的是数组的长度），如果当前位置存在元素的话，就判断该元素与要存入的元素的 hash 值以及 key 是否相同，如果相同的话，直接覆盖，不相同就通过拉链法解决冲突。
+
+所谓扰动函数指的就是 HashMap 的 hash 方法。使用 hash 方法也就是扰动函数是为了防止一些实现比较差的 hashCode() 方法 换句话说使用扰动函数之后可以减少碰撞。
+
+JDK 1.8 的 hash方法 相比于 JDK 1.7 hash 方法更加简化，但是原理不变。
+
+```java
+    static final int hash(Object key) {
+      int h;
+      // key.hashCode()：返回散列值也就是hashcode
+      // ^ ：按位异或
+      // >>>:无符号右移，忽略符号位，空位都以0补齐
+      return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+  }
+```
+
+对比一下 JDK1.7的 HashMap 的 hash 方法源码
+
+```java
+static int hash(int h) {
+    // This function ensures that hashCodes that differ only by
+    // constant multiples at each bit position have a bounded
+    // number of collisions (approximately 8 at default load factor).
+
+    h ^= (h >>> 20) ^ (h >>> 12);
+    return h ^ (h >>> 7) ^ (h >>> 4);
+}
+```
+
+相比于 JDK1.8 的 hash 方法 ，JDK 1.7 的 hash 方法的性能会稍差一点点，因为毕竟扰动了 4 次。
+
+所谓 **“拉链法”** 就是：将链表和数组相结合。也就是说创建一个链表数组，数组中每一格就是一个链表。若遇到哈希冲突，则将冲突的值加到链表中即可。
+
+[![jdk1.8之前的内部结构](https://camo.githubusercontent.com/eec1c575aa5ff57906dd9c9130ec7a82e212c96a/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f332f32302f313632343064626363333033643837323f773d33343826683d34323726663d706e6726733d3130393931)](https://camo.githubusercontent.com/eec1c575aa5ff57906dd9c9130ec7a82e212c96a/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f332f32302f313632343064626363333033643837323f773d33343826683d34323726663d706e6726733d3130393931)
+
+
+
+**JDK1.8之后**:
+
+相比于之前的版本， JDK1.8之后在解决哈希冲突时有了较大的变化，当链表长度大于阈值（默认为8）时，将链表转化为红黑树，以减少搜索时间。
+
+[![JDK1.8之后的HashMap底层数据结构](https://camo.githubusercontent.com/20de7e465cac279842851258ec4d1ec1c4d3d7d1/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32322f36373233333736342e6a7067)](https://camo.githubusercontent.com/20de7e465cac279842851258ec4d1ec1c4d3d7d1/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32322f36373233333736342e6a7067)
+
+> TreeMap、TreeSet以及JDK1.8之后的HashMap底层都用到了红黑树。红黑树就是为了解决二叉查找树的缺陷，因为二叉查找树在某些情况下会退化成一个线性结构。
+
+
+
+#### 8.HashMap 的长度为什么是2的幂次方？
+
+为了能让 HashMap 存取高效，尽量较少碰撞，也就是要尽量把数据分配均匀。我们上面也讲到了过了，Hash 值的范围值-2147483648（-2^31）到2147483647（2^31-1），前后加起来大概40亿（2^32）的映射空间，只要哈希函数映射得比较均匀松散，一般应用是很难出现碰撞的。但问题是一个40亿长度的数组，内存是放不下的。所以这个散列值是不能直接拿来用的。用之前还要先做对数组的长度取模运算，得到的余数才能用来要存放的位置也就是对应的数组下标。这个数组下标的计算方法是“ `(n - 1) & hash`”。（n代表数组长度）。这也就解释了 HashMap 的长度为什么是2的幂次方。
+
+**这个算法应该如何设计呢？**
+
+我们首先可能会想到采用%取余的操作来实现。但是，重点来了：**“取余(%)操作中如果除数是2的幂次则等价于与其除数减一的与(&)操作（也就是说 hash%length==hash&(length-1)的前提是 length 是2的 n 次方；）。”** 并且 **采用二进制位操作 &，相对于%能够提高运算效率，这就解释了 HashMap 的长度为什么是2的幂次方。**
+
+#### 9.HashMap 多线程操作导致死循环问题？
+
+主要原因在于 并发下的Rehash 会造成元素之间会形成一个循环链表。不过，jdk 1.8 后解决了这个问题，但是还是不建议在多线程下使用 HashMap,因为多线程下使用 HashMap 还是会存在其他问题比如数据丢失。并发环境下推荐使用 ConcurrentHashMap 。
+
+#### 10.comparable 和 Comparator的区别
+
+- comparable接口实际上是出自java.lang包 它有一个 `compareTo(Object obj)`方法用来排序
+- comparator接口实际上是出自 java.util 包它有一个`compare(Object obj1, Object obj2)`方法用来排序
+
+一般我们需要对一个集合使用自定义排序时，我们就要重写`compareTo()`方法或`compare()`方法，当我们需要对某一个集合实现两种排序方式，比如一个song对象中的歌名和歌手名分别采用一种排序方法的话，我们可以重写`compareTo()`方法和使用自制的Comparator方法或者以两个Comparator来实现歌名排序和歌星名排序，第二种代表我们只能使用两个参数版的 `Collections.sort()`.
+
+**Comparator定制排序**
+
+```java
+        ArrayList<Integer> arrayList = new ArrayList<Integer>();
+        arrayList.add(-1);
+        arrayList.add(3);
+        arrayList.add(3);
+        arrayList.add(-5);
+        arrayList.add(7);
+        arrayList.add(4);
+        arrayList.add(-9);
+        arrayList.add(-7);
+        System.out.println("原始数组:");
+        System.out.println(arrayList);
+        // void reverse(List list)：反转
+        Collections.reverse(arrayList);
+        System.out.println("Collections.reverse(arrayList):");
+        System.out.println(arrayList);
+
+        // void sort(List list),按自然排序的升序排序
+        Collections.sort(arrayList);
+        System.out.println("Collections.sort(arrayList):");
+        System.out.println(arrayList);
+        // 定制排序的用法
+        Collections.sort(arrayList, new Comparator<Integer>() {
+
+            @Override
+            public int compare(Integer o1, Integer o2) {
+                return o2.compareTo(o1);
+            }
+        });
+        System.out.println("定制排序后：");
+        System.out.println(arrayList);
+```
+
+Output:
+
+```
+原始数组:
+[-1, 3, 3, -5, 7, 4, -9, -7]
+Collections.reverse(arrayList):
+[-7, -9, 4, 7, -5, 3, 3, -1]
+Collections.sort(arrayList):
+[-9, -7, -5, -1, 3, 3, 4, 7]
+定制排序后：
+[7, 4, 3, 3, -1, -5, -7, -9]
+```
+
+**重写compareTo方法实现按年龄来排序**
+
+```java
+// person对象没有实现Comparable接口，所以必须实现，这样才不会出错，才可以使treemap中的数据按顺序排列
+// 前面一个例子的String类已经默认实现了Comparable接口，详细可以查看String类的API文档，另外其他
+// 像Integer类等都已经实现了Comparable接口，所以不需要另外实现了
+public  class Person implements Comparable<Person> {
+    private String name;
+    private int age;
+
+    public Person(String name, int age) {
+        super();
+        this.name = name;
+        this.age = age;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public int getAge() {
+        return age;
+    }
+
+    public void setAge(int age) {
+        this.age = age;
+    }
+
+    /**
+     * TODO重写compareTo方法实现按年龄来排序
+     */
+    @Override
+    public int compareTo(Person o) {
+        // TODO Auto-generated method stub
+        if (this.age > o.getAge()) {
+            return 1;
+        } else if (this.age < o.getAge()) {
+            return -1;
+        }
+        return age;
+    }
+}
+    public static void main(String[] args) {
+        TreeMap<Person, String> pdata = new TreeMap<Person, String>();
+        pdata.put(new Person("张三", 30), "zhangsan");
+        pdata.put(new Person("李四", 20), "lisi");
+        pdata.put(new Person("王五", 10), "wangwu");
+        pdata.put(new Person("小红", 5), "xiaohong");
+        // 得到key的值的同时得到key所对应的值
+        Set<Person> keys = pdata.keySet();
+        for (Person key : keys) {
+            System.out.println(key.getAge() + "-" + key.getName());
+
+        }
+    }
+```
+
+Output：
+
+```java
+5-小红
+10-王五
+20-李四
+30-张三
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 数据结构
+
+## 树
+
+### 1.二叉树
+
+#### 1.1 定义
+
+**二叉树**是n(n>=0)个结点的有限集合，该集合或者为空集（称为空二叉树），或者由一个根结点和两棵互不相交的、分别称为根结点的左子树和右子树组成。
+ 图1.1展示了一棵普通二叉树：
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-797eb7ba417745b2.png?imageMogr2/auto-orient/strip|imageView2/2/w/455/format/webp)
+
+图1.1 二叉树
+
+
+
+#### 1.2 二叉树特点
+
+由二叉树定义以及图示分析得出二叉树有以下特点：
+ 1）每个结点最多有两颗子树，所以二叉树中不存在度大于2的结点。
+ 2）左子树和右子树是有顺序的，次序不能任意颠倒。
+ 3）即使树中某结点只有一棵子树，也要区分它是左子树还是右子树。
+
+#### 1.3 二叉树性质
+
+1）在二叉树的第i层上最多有2i-1 个节点 。（i>=1）
+ 2）二叉树中如果深度为k,那么最多有2k-1个节点。(k>=1）
+ 3）n0=n2+1  n0表示度数为0的节点数，n2表示度数为2的节点数。
+ 4）在完全二叉树中，具有n个节点的完全二叉树的深度为[log2n]+1，其中[log2n]是向下取整。
+ 5）若对含 n 个结点的完全二叉树从上到下且从左至右进行 1 至 n 的编号，则对完全二叉树中任意一个编号为 i 的结点有如下特性：
+
+> (1) 若 i=1，则该结点是二叉树的根，无双亲, 否则，编号为 [i/2] 的结点为其双亲结点;
+>  (2) 若 2i>n，则该结点无左孩子，  否则，编号为 2i 的结点为其左孩子结点；
+>  (3) 若 2i+1>n，则该结点无右孩子结点，  否则，编号为2i+1 的结点为其右孩子结点。
+
+#### 1.4 斜树
+
+**斜树**：所有的结点都只有左子树的二叉树叫左斜树。所有结点都是只有右子树的二叉树叫右斜树。这两者统称为斜树。
+ 
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-a512316455261ec7.png?imageMogr2/auto-orient/strip|imageView2/2/w/373/format/webp)
+
+图1.2 左斜树
+
+
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-352190ff8558efcb.png?imageMogr2/auto-orient/strip|imageView2/2/w/342/format/webp)
+
+图1.3 右斜树
+
+
+
+#### 1.5 满二叉树
+
+**满二叉树**：在一棵二叉树中。如果所有分支结点都存在左子树和右子树，并且所有叶子都在同一层上，这样的二叉树称为满二叉树。
+ 满二叉树的特点有：
+ 1）叶子只能出现在最下一层。出现在其它层就不可能达成平衡。
+ 2）非叶子结点的度一定是2。
+ 3）在同样深度的二叉树中，满二叉树的结点个数最多，叶子数最多。
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-c7a557dda4ffc7da.png?imageMogr2/auto-orient/strip|imageView2/2/w/392/format/webp)
+
+图1.4 满二叉树
+
+#### 1.6 完全二叉树
+
+**完全二叉树**：对一颗具有n个结点的二叉树按层编号，如果编号为i(1<=i<=n)的结点与同样深度的满二叉树中编号为i的结点在二叉树中位置完全相同，则这棵二叉树称为完全二叉树。
+ 图3.5展示一棵完全二叉树
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-132fd0379f34bcc1.png?imageMogr2/auto-orient/strip|imageView2/2/w/404/format/webp)
+
+图1.5 完全二叉树
+
+
+**特点**
+
+1）叶子结点只能出现在最下层和次下层。
+2）最下层的叶子结点集中在树的左部。
+3）倒数第二层若存在叶子结点，一定在右部连续位置。
+4）如果结点度为1，则该结点只有左孩子，即没有右子树。
+5）同样结点数目的二叉树，完全二叉树深度最小。
+**注**：满二叉树一定是完全二叉树，但反过来不一定成立。
+
+#### 1.7 二叉树的存储结构
+
+##### 1.7.1 顺序存储
+
+二叉树的顺序存储结构就是使用一维数组存储二叉树中的结点，并且结点的存储位置，就是数组的下标索引。
+
+
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-3293242769696303.png?imageMogr2/auto-orient/strip|imageView2/2/w/441/format/webp)
+
+图3.6
+
+图3.6所示的一棵完全二叉树采用顺序存储方式，如图3.7表示：
+
+
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-e916580c061a1139.png?imageMogr2/auto-orient/strip|imageView2/2/w/596/format/webp)
+
+图3.7 顺序存储
+
+
+
+由图3.7可以看出，当二叉树为完全二叉树时，结点数刚好填满数组。
+ 那么当二叉树不为完全二叉树时，采用顺序存储形式如何呢？例如：对于图3.8描述的二叉树：
+
+
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-92d8a8d61c2aace7.png?imageMogr2/auto-orient/strip|imageView2/2/w/440/format/webp)
+
+图3.8.png
+
+
+ 其中浅色结点表示结点不存在。那么图3.8所示的二叉树的顺序存储结构如图3.9所示：
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-d6cd02856b386d6d.png?imageMogr2/auto-orient/strip|imageView2/2/w/448/format/webp)
+
+图3.9
+
+其中，∧表示数组中此位置没有存储结点。此时可以发现，顺序存储结构中已经出现了空间浪费的情况。
+ 那么对于图3.3所示的右斜树极端情况对应的顺序存储结构如图3.10所示：
+
+
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-0ada42b04e0861a8.png?imageMogr2/auto-orient/strip|imageView2/2/w/700/format/webp)
+
+图3.10
+
+
+
+由图3.10可以看出，对于这种右斜树极端情况，采用顺序存储的方式是十分浪费空间的。因此，顺序存储一般适用于完全二叉树。
+
+##### 1.7.2 二叉链表
+
+既然顺序存储不能满足二叉树的存储需求，那么考虑采用链式存储。由二叉树定义可知，二叉树的每个结点最多有两个孩子。因此，可以将结点数据结构定义为一个数据和两个指针域。表示方式如图3.11所示：
+
+
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-95cd18e8cc20316e.png?imageMogr2/auto-orient/strip|imageView2/2/w/315/format/webp)
+
+图3.11
+
+定义结点代码：
+
+```cpp
+typedef struct BiTNode{
+    TElemType data;//数据
+    struct BiTNode *lchild, *rchild;//左右孩子指针
+} BiTNode, *BiTree;
+```
+
+则图3.6所示的二叉树可以采用图3.12表示。
+
+
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-73ae201506a7adc9.png?imageMogr2/auto-orient/strip|imageView2/2/w/688/format/webp)
+
+图3.12
+
+
+
+图3.12中采用一种链表结构存储二叉树，这种链表称为二叉链表。
+
+#### 1.8 二叉树遍历
+
+二叉树的遍历一个重点考查的知识点。
+
+##### 1.8.1 定义
+
+**二叉树的遍历**是指从二叉树的根结点出发，按照某种次序依次访问二叉树中的所有结点，使得每个结点被访问一次，且仅被访问一次。
+ 二叉树的访问次序可以分为四种：
+
+> 前序遍历
+>  中序遍历
+>  后序遍历
+>  层序遍历
+
+##### 1.8.2 前序遍历
+
+**前序遍历**通俗的说就是从二叉树的根结点出发，当第一次到达结点时就输出结点数据，按照先向左在向右的方向访问。
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-df454c0a574836de.png?imageMogr2/auto-orient/strip|imageView2/2/w/441/format/webp)
+
+3.13
+
+
+ 图3.13所示二叉树访问如下：
+
+> 从根结点出发，则第一次到达结点A，故输出A;
+>  继续向左访问，第一次访问结点B，故输出B；
+>  按照同样规则，输出D，输出H；
+>  当到达叶子结点H，返回到D，此时已经是第二次到达D，故不在输出D，进而向D右子树访问，D右子树不为空，则访问至I，第一次到达I，则输出I；
+>  I为叶子结点，则返回到D，D左右子树已经访问完毕，则返回到B，进而到B右子树，第一次到达E，故输出E；
+>  向E左子树，故输出J；
+>  按照同样的访问规则，继续输出C、F、G；
+
+则3.13所示二叉树的前序遍历输出为：
+ **ABDHIEJCFG**
+
+##### 1.8.3 中序遍历
+
+**中序遍历**就是从二叉树的根结点出发，当第二次到达结点时就输出结点数据，按照先向左在向右的方向访问。
+
+图3.13所示二叉树中序访问如下：
+
+> 从根结点出发，则第一次到达结点A，不输出A，继续向左访问，第一次访问结点B，不输出B；继续到达D，H；
+>  到达H，H左子树为空，则返回到H，此时第二次访问H，故输出H；
+>  H右子树为空，则返回至D，此时第二次到达D，故输出D；
+>  由D返回至B，第二次到达B，故输出B；
+>  按照同样规则继续访问，输出J、E、A、F、C、G；
+
+则3.13所示二叉树的中序遍历输出为：
+ **HDIBJEAFCG**
+
+##### 1.8.4 后序遍历
+
+**后序遍历**就是从二叉树的根结点出发，当第三次到达结点时就输出结点数据，按照先向左在向右的方向访问。
+
+图3.13所示二叉树后序访问如下：
+
+> 从根结点出发，则第一次到达结点A，不输出A，继续向左访问，第一次访问结点B，不输出B；继续到达D，H；
+>  到达H，H左子树为空，则返回到H，此时第二次访问H，不输出H；
+>  H右子树为空，则返回至H，此时第三次到达H，故输出H；
+>  由H返回至D，第二次到达D，不输出D；
+>  继续访问至I，I左右子树均为空，故第三次访问I时，输出I；
+>  返回至D，此时第三次到达D，故输出D；
+>  按照同样规则继续访问，输出J、E、B、F、G、C，A；
+
+则图3.13所示二叉树的后序遍历输出为：
+ **HIDJEBFGCA**
+ 虽然二叉树的遍历过程看似繁琐，但是由于二叉树是一种递归定义的结构，故采用递归方式遍历二叉树的代码十分简单。
+ 递归实现代码如下：
+
+```cpp
+/*二叉树的前序遍历递归算法*/
+void PreOrderTraverse(BiTree T)
+{
+    if(T==NULL)
+    return;
+    printf("%c", T->data);  /*显示结点数据，可以更改为其他对结点操作*/
+    PreOrderTraverse(T->lchild);    /*再先序遍历左子树*/
+    PreOrderTraverse(T->rchild);    /*最后先序遍历右子树*/
+}
+
+
+/*二叉树的中序遍历递归算法*/
+void InOrderTraverse(BiTree T)
+{
+    if(T==NULL)
+    return;
+    InOrderTraverse(T->lchild); /*中序遍历左子树*/
+    printf("%c", T->data);  /*显示结点数据，可以更改为其他对结点操作*/
+    InOrderTraverse(T->rchild); /*最后中序遍历右子树*/
+}
+
+
+/*二叉树的后序遍历递归算法*/
+void PostOrderTraverse(BiTree T)
+{
+    if(T==NULL)
+    return;
+    PostOrderTraverse(T->lchild);   /*先后序遍历左子树*/
+    PostOrderTraverse(T->rchild);   /*再后续遍历右子树*/
+    printf("%c", T->data);  /*显示结点数据，可以更改为其他对结点操作*/
+}
+```
+
+##### 1.8.5 层次遍历
+
+层次遍历就是按照树的层次自上而下的遍历二叉树。针对图3.13所示二叉树的层次遍历结果为：
+ **ABCDEFGHIJ**
+ 层次遍历的详细方法可以参考[二叉树的按层遍历法](https://blog.csdn.net/lingchen2348/article/details/52774535)。
+
+##### 1.8.6 遍历常考考点
+
+对于二叉树的遍历有一类典型题型。
+ 1）已知前序遍历序列和中序遍历序列，确定一棵二叉树。
+ 例题：若一棵二叉树的前序遍历为ABCDEF，中序遍历为CBAEDF，请画出这棵二叉树。
+ 分析：前序遍历第一个输出结点为根结点，故A为根结点。早中序遍历中根结点处于左右子树结点中间，故结点A的左子树中结点有CB，右子树中结点有EDF。
+ 如图3.14所示：
+
+
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-8c94f437f66b5d44.png?imageMogr2/auto-orient/strip|imageView2/2/w/438/format/webp)
+
+​                                                                        图3.14
+
+
+
+按照同样的分析方法，对A的左右子树进行划分，最后得出二叉树的形态如图3.15所示：
+
+
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/7043118-63b9acd9dc69201b.png?imageMogr2/auto-orient/strip|imageView2/2/w/381/format/webp)
+
+​                                                                                 图3.15.png
+
+2）已知后序遍历序列和中序遍历序列，确定一棵二叉树。
+ 后序遍历中最后访问的为根结点，因此可以按照上述同样的方法，找到根结点后分成两棵子树，进而继续找到子树的根结点，一步步确定二叉树的形态。
+ **注**：已知前序遍历序列和后序遍历序列，不可以唯一确定一棵二叉树。
+
+
+
+### 2.红黑树
+
+#### **1.二叉搜索树**
+
+二叉搜索树又叫二叉查找树或者二叉排序树，它首先是一个二叉树，而且必须满足下面的条件：
+
+1）若左子树不空，则左子树上所有结点的值均小于它的根节点的值；
+
+2）若右子树不空，则右子树上所有结点的值均大于它的根结点的值
+
+3）左、右子树也分别为二叉搜索树
+
+
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/4314397-9588c432805a9570.png?imageMogr2/auto-orient/strip|imageView2/2/w/300/format/webp)
+
+#### **2.平衡二叉树**
+
+二叉搜索树解决了许多问题，比如可以快速的查找最大值和最小值，可以快速找到排名第几位的值，快速搜索和排序等等。但普通的二叉搜索树有可能出现极不平衡的情况（斜树），这样我们的时间复杂度就有可能退化成 O(N) 的情况。比如我们现在插入的数据是 [1,2,3,4,5,6,7] 转换为二叉树如下：
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/4314397-2f1facc1bcfc501c.png?imageMogr2/auto-orient/strip|imageView2/2/w/709/format/webp)
+
+​                                                                          （斜树）
+
+由于普通的二叉搜索树会出现极不平衡的情况，那么我们就必须得想想办法了，这个时候平衡二叉树就能帮到我们了。什么是平衡二叉树？平衡二叉搜索树（Self-balancing binary search tree）又被称为AVL树（有别于AVL算法），且具有以下性质：它是一 棵空树或**它的左右两个子树的高度差的绝对值不超过1**，并且左右两个子树都是一棵平衡二叉树。
+
+平衡二叉树有一个很重要的性质：左右两个子树的高度差的绝对值不超过1。那么解决方案就是如果二叉树的左右高度超过 1 ，我们就把当前树调整为一棵平衡二叉树。这就涉及到**左旋**、**右旋**、**先右旋再左旋**、**先左旋再右旋**。
+
+**2.1 右旋：**
+ 
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/4314397-318ca114772ad3fc.png?imageMogr2/auto-orient/strip|imageView2/2/w/986/format/webp)
+
+
+
+```swift
+   TreeNode<K, V> *R_Rotation(TreeNode<K, V> *pNode) {
+        TreeNode<K, V> *left = pNode->left;
+        TreeNode<K, V> *right = left->right;
+        left->right = pNode;
+        pNode->left = right;
+        // 重新调整高度
+        pNode->height = max(getHeight(pNode->left), getHeight(pNode->right)) + 1;
+        left->height = max(getHeight(left->left), getHeight(left->right)) + 1;
+        return left;
+    }
+```
+
+**2.2 左旋：**
+ 
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/4314397-f06bb1d69571eaf0.png?imageMogr2/auto-orient/strip|imageView2/2/w/944/format/webp)
+
+左旋
+
+
+
+```swift
+  TreeNode<K, V> *L_Rotation(TreeNode<K, V> *pNode) {
+        TreeNode<K, V> *right = pNode->right;
+        TreeNode<K, V> *left = right->left;
+        right->left = pNode;
+        pNode->right = left;
+        // 重新调整高度
+        pNode->height = max(getHeight(pNode->left), getHeight(pNode->right)) + 1;
+        right->height = max(getHeight(right->left), getHeight(right->right)) + 1;
+        return right;
+    }
+```
+
+**2.3 先右旋再左旋：**
+ 
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/4314397-d86683fad715ce89.png?imageMogr2/auto-orient/strip|imageView2/2/w/1200/format/webp)
+
+先右旋再左旋
+
+
+
+```php
+  TreeNode<K, V> *R_L_Rotation(TreeNode<K, V> *pNode) {
+    pNode->right = R_Rotation(pNode->right);
+    return L_Rotation(pNode);
+  }
+```
+
+**2.4 先左旋再右旋：**
+ 
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/4314397-fc689643c778438f.png?imageMogr2/auto-orient/strip|imageView2/2/w/1200/format/webp)
+
+先左旋再右旋
+
+
+
+```php
+  TreeNode<K, V> *L_R_Rotation(TreeNode<K, V> *pNode) {
+    pNode->left = L_Rotation(pNode->left);
+    return R_Rotation(pNode);
+  }
+```
+
+#### **3.红黑树**
+
+红黑树用法就比较广了，比如 JDK 1.8 的 HashMap，TreeMap，C++ 中的 map 和 multimap 等等。红黑树学习起来还是有一点难度的，这时如果我们心中有 B 树就有助于理解它，如果没有 B 树也没有关系。
+
+红黑树的特性:
+ （1）每个节点或者是黑色，或者是红色。
+ （2）根节点是黑色。
+ （3）每个叶子节点（NIL）是黑色。 [注意：这里叶子节点，是指为空(NIL或NULL)的叶子节点！]
+ （4）如果一个节点是红色的，则它的子节点必须是黑色的。
+ （5）从一个节点到该节点的子孙节点的所有路径上包含相同数目的黑节点。
+
+
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/4314397-a0bff7addb21cfe8.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/268/format/webp)
+
+红黑树
+
+假设我们现在要插入一个新的节点，如过插入的这个新的节点为黑色，那么必然会违反性质(5)，所以我们把新插入的点定义为红色的。但是如果插入的新节点为红色，就可能会违反性质(4) ，因此我们需要对其进行调整，使得整棵树依然满足红黑树的性质，也就是双红修正。接下来我们只要分情况分析就可以了：
+
+1. 如果没有出现双红现象，父亲是黑色的不需要修正；
+2. 叔叔是红色的 ，将叔叔和父亲染黑，然后爷爷染红；
+3. 叔叔是黑色的，父亲是爷爷的左节点，且当前节点是其父节点的右孩子，将“父节点”作为“新的当前节点”，以“新的当前节点”为支点进行左旋。然后将“父节点”设为“黑色”，将“祖父节点”设为“红色”，以“祖父节点”为支点进行右旋；
+4. 叔叔是黑色的，父亲是爷爷的左节点，且当前节点是其父节点的左孩子，将“父节点”设为“黑色”，将“祖父节点”设为“红色”，以“祖父节点”为支点进行右旋；
+5. 叔叔是黑色的，父亲是爷爷的右节点，且当前节点是其父节点的左孩子，将“父节点”作为“新的当前节点”，以“新的当前节点”为支点进行右旋。然后将“父节点”设为“黑色”，将“祖父节点”设为“红色”，以“祖父节点”为支点进行左旋；
+6. 叔叔是黑色的，父亲是爷爷的右节点，且当前节点是其父节点的右孩子，将“父节点”设为“黑色”，将“祖父节点”设为“红色”，以“祖父节点”为支点进行左旋；
+
+上面的双红修正现象看似比较复杂，但实际上只有三种情况，一种是没有双红现象，另一种是父亲和叔叔都是红色的，最后一种是叔叔是黑色的。我们来画个实例看下：
+
+
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/4314397-fae62fda145e9e35.png?imageMogr2/auto-orient/strip|imageView2/2/w/957/format/webp)
+
+
+
+```php
+void solveDoubleRed(TreeNode *pNode) {
+        while (pNode->parent && pNode->parent->color == red) {// 情况 1
+            TreeNode *uncle = brother(parent(pNode));
+
+            if (getColor(uncle) == red) {// 情况2
+                // 设置双亲和叔叔为黑色
+                setColor(parent(pNode), black);
+                setColor(uncle, black);
+                // 指针回溯至爷爷
+                pNode = parent(parent(pNode));
+            } else {
+                // 父亲是爷爷的左儿子
+                if (parent(parent(pNode))->left = parent(pNode)) { // 情况 3 和 4
+                    // 自己是父亲的右儿子
+                    if (parent(pNode)->right == pNode) {
+                        pNode = parent(pNode);
+                        L_Rotation(pNode);
+                    }
+                    // 把我自己这边的红色节点挪到隔壁树上，但仍然不能违反性质 4 和 5
+                    setColor(parent(pNode), black);
+                    setColor(parent(parent(pNode)), red);
+                    R_Rotation(parent(parent(pNode)));
+                } else { // 情况 5 和 6
+                    // 自己是父亲的左儿子
+                    if (parent(pNode)->left == pNode) {
+                        pNode = parent(pNode);
+                        R_Rotation(pNode);
+                    }
+                    // 把我自己这边的红色节点挪到隔壁树上，但仍然不能违反性质 4 和 5
+                    setColor(parent(pNode), black);
+                    setColor(parent(parent(pNode)), red);
+                    L_Rotation(parent(parent(pNode)));
+                }
+            }
+        }
+
+        // 根结点为黑色
+        root->color = black;
+    }
+```
+
+哎～好复杂这怎么记得住。如果要记住肯定不太可能而且费劲，接下来我们来分析下为什么要这么操作，还有没有更好的调整方法。我们所有的调整都是为了不违反性质4和性质5，假设我在左边的这个支树上新增了一个红色的节点，违反了性质4 。想法就是我把左支树上的一个红色节点，挪动右支树上去，这样就解决了我有两个连续红色节点的问题。但挪给右支树的过程中不能违反性质4和性质5，所以必须得考虑叔叔节点的颜色。
+
+
+
+![img](https:////upload-images.jianshu.io/upload_images/4314397-1c1da607c0af9450.png?imageMogr2/auto-orient/strip|imageView2/2/w/1089/format/webp)
+
+
+
+最后我们来看下红黑树的删除操作，红黑树的删除操作要比新增操作要复杂些，但总体来说都是出现问题就去解决问题。当我们移除的是一个红色节点，那么根本就不会影响我们的性质4和性质5，我们不需要调整，但倘若我们移除的是一个黑色的节点，这时肯定会违反我们的性质5，所以我们只需要调整移除黑色节点的情况。分情况讨论下：
+
+1. 如果兄弟节点是红色的，把兄弟节点染黑，父节点染红，左/右旋父节点；
+
+2. 如果兄弟节点是黑色的，并且两个侄子节点都是黑色的，将兄弟节点染红，指针回溯至父亲节点；
+
+3. 如果兄弟节点是黑色，的并且远侄子是黑色的，近侄子是红色的，将进侄子染黑，兄弟染红，左/右旋兄弟节点，进入下面情况 4 ；
+
+4. 如果兄弟节点是黑色的，并且远侄子是红色的，近侄子随意，将兄弟节点染成父亲节点的颜色，父亲节点染黑，远侄子染黑，左/右旋父亲节点。
+
+   
+
+   ![img](https:////upload-images.jianshu.io/upload_images/4314397-a46ca001a1a1a959.png?imageMogr2/auto-orient/strip|imageView2/2/w/1151/format/webp)
+
+   
+
+```php
+void solveLostBlack(TreeNode *pNode) {
+        while (pNode != root && getColor(pNode) == black) {
+            if (left(parent(pNode)) == pNode) {
+                TreeNode *sib = brother(pNode);
+                if (getColor(sib) == red) {
+                    setColor(sib, black);
+                    setColor(parent(pNode), red);
+                    L_Rotation(parent(pNode));
+                    sib = brother(pNode);
+                }
+
+                if (getColor(left(sib)) == black && getColor(right(sib)) == black) {
+                    setColor(sib, red);
+                    pNode = parent(pNode);
+                } else {
+                    if (getColor(right(sib)) == black) {
+                        setColor(left(sib), black);
+                        setColor(sib, red);
+                        R_Rotation(sib);
+                        sib = brother(pNode);
+                    }
+
+                    setColor(sib, getColor(parent(pNode)));
+                    setColor(parent(pNode), black);
+                    setColor(right(sib), black);
+                    L_Rotation(parent(pNode));
+                    pNode = root;
+                }
+            } else {
+                TreeNode *sib = brother(pNode);
+                if (getColor(sib) == red) {
+                    setColor(sib, black);
+                    setColor(parent(pNode), red);
+                    R_Rotation(parent(pNode));
+                    sib = brother(pNode);
+                }
+
+                if (getColor(left(sib)) == black && getColor(right(sib)) == black) {
+                    setColor(sib, red);
+                    pNode = parent(pNode);
+                } else {
+                    if (getColor(left(sib)) == black) {
+                        setColor(right(sib), black);
+                        setColor(sib, red);
+                        L_Rotation(sib);
+                        sib = brother(pNode);
+                    }
+
+                    setColor(sib, getColor(parent(pNode)));
+                    setColor(parent(pNode), black);
+                    setColor(left(sib), black);
+                    R_Rotation(parent(pNode));
+                    pNode = root;
+                }
+            }
+        }
+        pNode->color = black;
+    }
+```
