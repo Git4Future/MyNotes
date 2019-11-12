@@ -2252,7 +2252,7 @@ i4=i5+i6   true
 
 ### 二、JVM 垃圾回收
 
-#### 1.揭开 JVM 内存分配与回收的神秘面纱
+#### 1. JVM 内存分配与回收？
 
 Java 的自动内存管理主要是针对对象内存的回收和对象内存的分配。同时，Java 自动内存管理最核心的功能是 **堆** 内存中对象的分配与回收。
 
@@ -2270,15 +2270,857 @@ Java 堆是垃圾收集器管理的主要区域，因此也被称作**GC 堆（G
 2. 大对象直接进入老年代
 3. 长期存活的对象将进入老年代
 
-##### 1.1对象有现在Eden区域分配
+##### 1.1对象优先在Eden区域分配
+
+目前主流的垃圾收集器都会采用分代回收算法，因此需要将堆内存分为新生代和老年代，这样我们就可以根据各个年代的特点选择合适的垃圾收集算法。
+
+大多数情况下，对象在新生代中 eden 区分配。当 eden 区没有足够空间进行分配时，虚拟机将发起一次 Minor GC.下面我们来进行实际测试以下。
+
+在测试之前我们先来看看 **Minor GC 和 Full GC 有什么不同呢？**
+
+- **新生代 GC（Minor GC）**:指发生新生代的的垃圾收集动作，Minor GC 非常频繁，回收速度一般也比较快。
+- **老年代 GC（Major GC/Full GC）**:指发生在老年代的 GC，出现了 Major GC 经常会伴随至少一次的 Minor GC（并非绝对），Major GC 的速度一般会比 Minor GC 的慢 10 倍以上。
+
+**测试：**
+
+```Java
+public class GCTest {
+
+	public static void main(String[] args) {
+		byte[] allocation1, allocation2;
+		allocation1 = new byte[30900*1024];
+		//allocation2 = new byte[900*1024];
+	}
+}
+```
+
+通过以下方式运行： [![img](https://camo.githubusercontent.com/2713b77464413e9aeb63cdd9d8cd198cb3fea34a/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32362f32353137383335302e6a7067)](https://camo.githubusercontent.com/2713b77464413e9aeb63cdd9d8cd198cb3fea34a/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32362f32353137383335302e6a7067)
+
+添加的参数：`-XX:+PrintGCDetails` [![img](https://camo.githubusercontent.com/9c349ba9ea4778b4c5f7cd0fb7e7efd812902330/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32362f31303331373134362e6a7067)](https://camo.githubusercontent.com/9c349ba9ea4778b4c5f7cd0fb7e7efd812902330/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32362f31303331373134362e6a7067)
+
+运行结果 (红色字体描述有误，应该是对应于 JDK1.7 的永久代)：
+
+[![img](https://camo.githubusercontent.com/42464b598a233d4319009cc06e3d199b6331c314/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32362f32383935343238362e6a7067)](https://camo.githubusercontent.com/42464b598a233d4319009cc06e3d199b6331c314/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32362f32383935343238362e6a7067)
+
+从上图我们可以看出 eden 区内存几乎已经被分配完全（即使程序什么也不做，新生代也会使用 2000 多 k 内存）。假如我们再为 allocation2 分配内存会出现什么情况呢？
+
+```
+allocation2 = new byte[900*1024];
+```
+
+[![img](https://camo.githubusercontent.com/215514817e1b01cd89ba942c382d2f64cb6c9e3d/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32362f32383132383738352e6a7067)](https://camo.githubusercontent.com/215514817e1b01cd89ba942c382d2f64cb6c9e3d/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32362f32383132383738352e6a7067)
+
+**简单解释一下为什么会出现这种情况：** 因为给 allocation2 分配内存的时候 eden 区内存几乎已经被分配完了，我们刚刚讲了当 Eden 区没有足够空间进行分配时，虚拟机将发起一次 Minor GC.GC 期间虚拟机又发现 allocation1 无法存入 Survivor 空间，所以只好通过 **分配担保机制** 把新生代的对象提前转移到老年代中去，老年代上的空间足够存放 allocation1，所以不会出现 Full GC。执行 Minor GC 后，后面分配的对象如果能够存在 eden 区的话，还是会在 eden 区分配内存。
+
+##### 1.2 大对象直接进入老年代
+
+大对象就是需要大量连续内存空间的对象（比如：字符串、数组）。
+
+**为什么要这样呢？**
+
+为了避免为大对象分配内存时由于分配担保机制带来的复制而降低效率。
+
+##### 1.3 长期存活的对象将进入老年代
+
+既然虚拟机采用了分代收集的思想来管理内存，那么内存回收时就必须能识别哪些对象应放在新生代，哪些对象应放在老年代中。为了做到这一点，虚拟机给每个对象一个对象年龄（Age）计数器。
+
+如果对象在 Eden 出生并经过第一次 Minor GC 后仍然能够存活，并且能被 Survivor 容纳的话，将被移动到 Survivor 空间中，并将对象年龄设为 1.对象在 Survivor 中每熬过一次 MinorGC,年龄就增加 1 岁，当它的年龄增加到一定程度（默认为 15 岁），就会被晋升到老年代中。对象晋升到老年代的年龄阈值，可以通过参数 `-XX:MaxTenuringThreshold` 来设置。
+
+##### 1.4 动态对象年龄判定
+
+为了更好的适应不同程序的内存情况，虚拟机不是永远要求对象年龄必须达到了某个值才能进入老年代，如果 Survivor 空间中相同年龄所有对象大小的总和大于 Survivor 空间的一半，年龄大于或等于该年龄的对象就可以直接进入老年代，无需达到要求的年龄。
+
+
+
+#### 2. JVM如何判断对象已经死亡？
+
+堆中几乎放着所有的对象实例，对堆垃圾回收前的第一步就是要判断那些对象已经死亡（即不能再被任何途径使用的对象）。
+
+[![img](https://camo.githubusercontent.com/b3a4bf00f50b9981e3c7b933d54f276e20933b66/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f31313033343235392e6a7067)](https://camo.githubusercontent.com/b3a4bf00f50b9981e3c7b933d54f276e20933b66/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f31313033343235392e6a7067)
+
+##### 2.1 引用计数法
+
+给对象中添加一个引用计数器，每当有一个地方引用它，计数器就加 1；当引用失效，计数器就减 1；任何时候计数器为 0 的对象就是不可能再被使用的。
+
+**这个方法实现简单，效率高，但是目前主流的虚拟机中并没有选择这个算法来管理内存，其最主要的原因是它很难解决对象之间相互循环引用的问题。** 所谓对象之间的相互引用问题，如下面代码所示：除了对象 objA 和 objB 相互引用着对方之外，这两个对象之间再无任何引用。但是他们因为互相引用对方，导致它们的引用计数器都不为 0，于是引用计数算法无法通知 GC 回收器回收他们。
+
+```java
+public class ReferenceCountingGc {
+    Object instance = null;
+	public static void main(String[] args) {
+		ReferenceCountingGc objA = new ReferenceCountingGc();
+		ReferenceCountingGc objB = new ReferenceCountingGc();
+		objA.instance = objB;
+		objB.instance = objA;
+		objA = null;
+		objB = null;
+	}
+}
+```
+
+##### 2.2 可达性分析算法
+
+这个算法的基本思想就是通过一系列的称为 **“GC Roots”** 的对象作为起点，从这些节点开始向下搜索，节点所走过的路径称为引用链，当一个对象到 GC Roots 没有任何引用链相连的话，则证明此对象是不可用的。
+
+[![可达性分析算法 ](https://camo.githubusercontent.com/6c6a9c7e2a7849cab8d5966ec1916115380e2842/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f37323736323034392e6a7067)](https://camo.githubusercontent.com/6c6a9c7e2a7849cab8d5966ec1916115380e2842/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f37323736323034392e6a7067)
+
+**在Java中，可作为GC Root的对象包括以下几种：**
+
+- 虚拟机栈（栈帧中的本地变量表）中引用的对象
+- 方法区中类静态属性引用的对象
+- 方法区中常量引用的对象
+- 本地方法栈中JNI（即一般说的Native方法）引用的对象
+
+##### 2.3 不可达的对象并非“非死不可”
+
+即使在可达性分析算法中不可达的对象，也并非是“非死不可”的，这时候它们暂时处于“缓刑”阶段，要真正宣告一个对象死亡，至少要经历再次标记过程。
+**标记的前提是对象在进行可达性分析后发现没有与GC Roots相连接的引用链。**
+
+1. 第一次标记并进行一次筛选
+
+   筛选的条件是此对象是否有必要执行finalize()方法。
+   当对象没有覆盖finalize方法，或者finzlize方法已经被虚拟机调用过，虚拟机将这两种情况都视为“没有必要执行”，对象被回收。
+
+2. 第二次标记
+
+   如果这个对象被判定为有必要执行finalize（）方法，那么这个对象将会被放置在一个名为：F-Queue的队列之中，并在稍后由一条虚拟机自动建立的、低优先级的Finalizer线程去执行。这里所谓的“执行”是指虚拟机会触发这个方法，但并不承诺会等待它运行结束。这样做的原因是，如果一个对象finalize（）方法中执行缓慢，或者发生死循环（更极端的情况），将很可能会导致F-Queue队列中的其他对象永久处于等待状态，甚至导致整个内存回收系统崩溃。
+   Finalize（）方法是对象脱逃死亡命运的最后一次机会，稍后GC将对F-Queue中的对象进行第二次小规模标记，如果对象要在finalize（）中成功拯救自己----只要重新与引用链上的任何的一个对象建立关联即可，譬如把自己赋值给某个类变量或对象的成员变量，那在第二次标记时它将移除出“即将回收”的集合。如果对象这时候还没逃脱，那基本上它就真的被回收了。
+
+##### 2.4 Java引用
+
+无论是通过引用计数法判断对象引用数量，还是通过可达性分析法判断对象的引用链是否可达，判定对象的存活都与“引用”有关。
+
+JDK1.2 之前，Java 中引用的定义很传统：如果 reference 类型的数据存储的数值代表的是另一块内存的起始地址，就称这块内存代表一个引用。
+
+JDK1.2 以后，Java 对引用的概念进行了扩充，将引用分为强引用、软引用、弱引用、虚引用四种（引用强度逐渐减弱）
+
+1. **强引用（StrongReference）**
+
+   强引用就是指在程序代码中普遍存在的，类似`Object obj = new Object()`这类似的引用，只要强引用在，垃圾搜集器永远不会搜集被引用的对象。也就是说，宁愿出现内存溢出，也不会回收这些对象。
+
+2. **软引用（SoftReference）**
+
+   软引用是用来描述一些有用但并不是必需的对象，在Java中用`java.lang.ref.SoftReference`类来表示。对于软引用关联着的对象，只有在内存不足的时候JVM才会回收该对象。因此，这一点可以很好地用来解决OOM的问题，并且这个特性很适合用来实现缓存：比如网页缓存、图片缓存等。
+
+   ```java
+   import java.lang.ref.SoftReference;
+    
+   public class Main {
+       public static void main(String[] args) {
+            
+           SoftReference<String> sr = new SoftReference<String>(new String("hello"));
+           System.out.println(sr.get());
+       }
+   }
+   ```
+
+   软引用可以和一个引用队列（ReferenceQueue）联合使用，如果软引用所引用的对象被垃圾回收，JAVA 虚拟机就会把这个软引用加入到与之关联的引用队列中。
+
+3. **弱引用（WeakReference）**
+
+   弱引用也是用来描述非必需对象的，当JVM进行垃圾回收时，无论内存是否充足，都会回收被弱引用关联的对象。在java中，用java.lang.ref.WeakReference类来表示。下面是使用示例：
+
+   ```Java
+   import java.lang.ref.WeakReference;
+    
+   public class Main {
+       public static void main(String[] args) {
+        
+           WeakReference<String> sr = new WeakReference<String>(new String("hello"));
+            
+           System.out.println(sr.get());
+           System.gc();                //通知JVM的gc进行垃圾回收
+           System.out.println(sr.get());
+       }
+   }
+   ```
+
+   ***弱引用与软引用的区别在于***：只具有弱引用的对象拥有更短暂的生命周期。在垃圾回收器线程扫描它所管辖的内存区域的过程中，一旦发现了只具有弱引用的对象，不管当前内存空间足够与否，都会回收它的内存。不过，由于垃圾回收器是一个优先级很低的线程， 因此不一定会很快发现那些只具有弱引用的对象。
+
+4. 如果一个对象只具有弱引用，那就类似于**可有可无的生活用品**。弱引用与软引用的区别在于：只具有弱引用的对象拥有更短暂的生命周期。在垃圾回收器线程扫描它所管辖的内存区域的过程中，一旦发现了只具有弱引用的对象，不管当前内存空间足够与否，都会回收它的内存。不过，由于垃圾回收器是一个优先级很低的线程， 因此不一定会很快发现那些只具有弱引用的对象。
+
+   弱引用可以和一个引用队列（ReferenceQueue）联合使用，如果弱引用所引用的对象被垃圾回收，Java 虚拟机就会把这个弱引用加入到与之关联的引用队列中。
+
+5. **虚引用（PhantomReference）**
+
+   虚引用和前面的软引用、弱引用不同，它并不影响对象的生命周期。在java中用`java.lang.ref.PhantomReference`类表示。如果一个对象与虚引用关联，则跟没有引用与之关联一样，在任何时候都可能被垃圾回收器回收。
+    要注意的是，虚引用必须和引用队列关联使用，当垃圾回收器准备回收一个对象时，如果发现它还有虚引用，就会把这个虚引用加入到与之 关联的引用队列中。程序可以通过判断引用队列中是否已经加入了虚引用，来了解被引用的对象是否将要被垃圾回收。如果程序发现某个虚引用已经被加入到引用队列，那么就可以在所引用的对象的内存被回收之前采取必要的行动。
+
+   ```Java
+   import java.lang.ref.PhantomReference;
+   import java.lang.ref.ReferenceQueue;
+    
+   public class Main {
+       public static void main(String[] args) {
+           ReferenceQueue<String> queue = new ReferenceQueue<String>();
+           PhantomReference<String> pr = new PhantomReference<String>(new String("hello"), queue);
+           System.out.println(pr.get());
+       }
+   }
+   ```
+
+   **虚引用与软引用和弱引用的一个区别在于：** 虚引用必须和引用队列（ReferenceQueue）联合使用。当垃圾回收器准备回收一个对象时，如果发现它还有虚引用，就会在回收对象的内存之前，把这个虚引用加入到与之关联的引用队列中。程序可以通过判断引用队列中是否已经加入了虚引用，来了解被引用的对象是否将要被垃圾回收。程序如果发现某个虚引用已经被加入到引用队列，那么就可以在所引用的对象的内存被回收之前采取必要的行动。
+
+   特别注意，在程序设计中一般很少使用弱引用与虚引用，使用软引用的情况较多，这是因为**软引用可以加速 JVM 对垃圾内存的回收速度，可以维护系统的运行安全，防止内存溢出（OutOfMemory）等问题的产生**。
+
+   在使用软引用和弱引用的时候，我们可以显示地通过System.gc()来通知JVM进行垃圾回收，但是要注意的是，虽然发出了通知，JVM不一定会立刻执行，也就是说这句是无法确保此时JVM一定会进行垃圾回收的。
+
+##### 2.5 如何判断一个常量是废弃常量
+
+运行时常量池主要回收的是废弃的常量。那么，我们如何判断一个常量是废弃常量呢？
+
+假如在常量池中存在字符串 "abc"，如果当前没有任何 String 对象引用该字符串常量的话，就说明常量 "abc" 就是废弃常量，如果这时发生内存回收的话而且有必要的话，"abc" 就会被系统清理出常量池。
+
+注意：我们在 [可能是把 Java 内存区域讲的最清楚的一篇文章 ](https://mp.weixin.qq.com/s?__biz=MzU4NDQ4MzU5OA==&mid=2247484303&idx=1&sn=af0fd436cef755463f59ee4dd0720cbd&chksm=fd9855eecaefdcf8d94ac581cfda4e16c8a730bda60c3b50bc55c124b92f23b6217f7f8e58d5&token=506869459&lang=zh_CN#rd)也讲了 JDK1.7 及之后版本的 JVM 已经将运行时常量池从方法区中移了出来，在 Java 堆（Heap）中开辟了一块区域存放运行时常量池。
+
+##### 2.6 如何判断一个类是无用的类
+
+方法区主要回收的是无用的类，那么如何判断一个类是无用的类的呢？
+
+判定一个常量是否是“废弃常量”比较简单，而要判定一个类是否是“无用的类”的条件则相对苛刻许多。类需要同时满足下面 3 个条件才能算是 **“无用的类”** ：
+
+- 该类所有的实例都已经被回收，也就是 Java 堆中不存在该类的任何实例。
+- 加载该类的 ClassLoader 已经被回收。
+- 该类对应的 java.lang.Class 对象没有在任何地方被引用，无法在任何地方通过反射访问该类的方法。
+
+虚拟机可以对满足上述 3 个条件的无用类进行回收，这里说的仅仅是“可以”，而并不是和对象一样不使用了就会必然被回收。
+
+#### 3. 垃圾收集算法
+
+[![垃圾收集算法分类](https://camo.githubusercontent.com/abe4956dea64d2661d54586797be1516f9166d0b/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545352539452538332545352539432542452545362539342542362545392539422538362545372541452539372545362542332539352e6a7067)](https://camo.githubusercontent.com/abe4956dea64d2661d54586797be1516f9166d0b/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545352539452538332545352539432542452545362539342542362545392539422538362545372541452539372545362542332539352e6a7067)
+
+##### 3.1 标记-清除算法
+
+该算法分为“标记”和“清除”阶段：首先标记出所有需要回收的对象，在标记完成后统一回收所有被标记的对象。它是最基础的收集算法，后续的算法都是对其不足进行改进得到。这种垃圾收集算法会带来两个明显的问题：
+
+1. **效率问题**
+2. **空间问题（标记清除后会产生大量不连续的碎片）**
+
+[![公众号](https://camo.githubusercontent.com/dc1f798e7c7f9aa9a3ab692db10a6b1788e5d505/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f36333730373238312e6a7067)](https://camo.githubusercontent.com/dc1f798e7c7f9aa9a3ab692db10a6b1788e5d505/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f36333730373238312e6a7067)
+
+##### 3.2 复制算法
+
+为了解决效率问题，“复制”收集算法出现了。它可以将内存分为大小相同的两块，每次使用其中的一块。当这一块的内存使用完后，就将还存活的对象复制到另一块去，然后再把使用的空间一次清理掉。这样就使每次的内存回收都是对内存区间的一半进行回收。
+
+[![公众号](https://camo.githubusercontent.com/94cfc5e1fbe9d49b3ed056d2943fd86dac1833a2/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f39303938343632342e6a7067)](https://camo.githubusercontent.com/94cfc5e1fbe9d49b3ed056d2943fd86dac1833a2/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f39303938343632342e6a7067)
+
+##### 3.3 标记-整理算法
+
+根据老年代的特点提出的一种标记算法，标记过程仍然与“标记-清除”算法一样，但后续步骤不是直接对可回收对象回收，而是让所有存活的对象向一端移动，然后直接清理掉端边界以外的内存。
+
+[![标记-整理算法 ](https://camo.githubusercontent.com/e5223ec7b2460498e1934c14eeaf969bafdcab59/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f39343035373034392e6a7067)](https://camo.githubusercontent.com/e5223ec7b2460498e1934c14eeaf969bafdcab59/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f39343035373034392e6a7067)
+
+##### 3.4 分代收集算法
+
+当前虚拟机的垃圾收集都采用分代收集算法，这种算法没有什么新的思想，只是根据对象存活周期的不同将内存分为几块。一般将 java 堆分为新生代和老年代，这样我们就可以根据各个年代的特点选择合适的垃圾收集算法。
+
+**比如在新生代中，每次收集都会有大量对象死去，所以可以选择复制算法，只需要付出少量对象的复制成本就可以完成每次垃圾收集。而老年代的对象存活几率是比较高的，而且没有额外的空间对它进行分配担保，所以我们必须选择“标记-清除”或“标记-整理”算法进行垃圾收集。**
+
+**延伸面试问题：** HotSpot 为什么要分为新生代和老年代？
+
+
+
+#### 4. 垃圾收集器
+
+[![垃圾收集器分类](https://camo.githubusercontent.com/f769c52ae89d045695e8b41d4583dda4b921ca3e/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545352539452538332545352539432542452545362539342542362545392539422538362545352539392541382e6a7067)](https://camo.githubusercontent.com/f769c52ae89d045695e8b41d4583dda4b921ca3e/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545352539452538332545352539432542452545362539342542362545392539422538362545352539392541382e6a7067)
+
+**如果说收集算法是内存回收的方法论，那么垃圾收集器就是内存回收的具体实现。**
+
+虽然我们对各个收集器进行比较，但并非要挑选出一个最好的收集器。因为直到现在为止还没有最好的垃圾收集器出现，更加没有万能的垃圾收集器，**我们能做的就是根据具体应用场景选择适合自己的垃圾收集器**。试想一下：如果有一种四海之内、任何场景下都适用的完美收集器存在，那么我们的 HotSpot 虚拟机就不会实现那么多不同的垃圾收集器了。
+
+##### 4.1 Serial 收集器
+
+Serial（串行）收集器收集器是最基本、历史最悠久的垃圾收集器了。大家看名字就知道这个收集器是一个单线程收集器了。它的 **“单线程”** 的意义不仅仅意味着它只会使用一条垃圾收集线程去完成垃圾收集工作，更重要的是它在进行垃圾收集工作的时候必须暂停其他所有的工作线程（ **"Stop The World"** ），直到它收集结束。
+
+**新生代采用复制算法，老年代采用标记-整理算法。** [![ Serial 收集器 ](https://camo.githubusercontent.com/aba41c5c08ea9884554b9a69ea69c7ceeebc83ff/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f34363837333032362e6a7067)](https://camo.githubusercontent.com/aba41c5c08ea9884554b9a69ea69c7ceeebc83ff/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f34363837333032362e6a7067)
+
+虚拟机的设计者们当然知道 Stop The World 带来的不良用户体验，所以在后续的垃圾收集器设计中停顿时间在不断缩短（仍然还有停顿，寻找最优秀的垃圾收集器的过程仍然在继续）。
+
+但是 Serial 收集器有没有优于其他垃圾收集器的地方呢？当然有，它**简单而高效（与其他收集器的单线程相比）**。Serial 收集器由于没有线程交互的开销，自然可以获得很高的单线程收集效率。Serial 收集器对于运行在 Client 模式下的虚拟机来说是个不错的选择。
+
+##### 4.2 ParNew 收集器
+
+**ParNew 收集器其实就是 Serial 收集器的多线程版本，除了使用多线程进行垃圾收集外，其余行为（控制参数、收集算法、回收策略等等）和 Serial 收集器完全一样。**
+
+**新生代采用复制算法，老年代采用标记-整理算法。** [![ParNew 收集器 ](https://camo.githubusercontent.com/f298ba56ec4667487fdf4acc987f2ef9e6df254e/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f32323031383336382e6a7067)](https://camo.githubusercontent.com/f298ba56ec4667487fdf4acc987f2ef9e6df254e/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f32323031383336382e6a7067)
+
+它是许多运行在 Server 模式下的虚拟机的首要选择，除了 Serial 收集器外，只有它能与 CMS 收集器（真正意义上的并发收集器，后面会介绍到）配合工作。
+
+**并行和并发概念补充：**
+
+- **并行（Parallel）** ：指多条垃圾收集线程并行工作，但此时用户线程仍然处于等待状态。
+- **并发（Concurrent）**：指用户线程与垃圾收集线程同时执行（但不一定是并行，可能会交替执行），用户程序在继续运行，而垃圾收集器运行在另一个 CPU 上。
+
+##### 4.3 Parallel Scavenge 收集器
+
+Parallel Scavenge 收集器也是使用复制算法的多线程收集器，它看上去几乎和ParNew都一样。 **那么它有什么特别之处呢？**
+
+```
+-XX:+UseParallelGC 
+
+    使用 Parallel 收集器+ 老年代串行
+
+-XX:+UseParallelOldGC
+
+    使用 Parallel 收集器+ 老年代并行
+```
+
+**Parallel Scavenge 收集器关注点是吞吐量（高效率的利用 CPU）。CMS 等垃圾收集器的关注点更多的是用户线程的停顿时间（提高用户体验）。所谓吞吐量就是 CPU 中用于运行用户代码的时间与 CPU 总消耗时间的比值。** Parallel Scavenge 收集器提供了很多参数供用户找到最合适的停顿时间或最大吞吐量，如果对于收集器运作不太了解的话，手工优化存在困难的话可以选择把内存管理优化交给虚拟机去完成也是一个不错的选择。
+
+**新生代采用复制算法，老年代采用标记-整理算法。** [![Parallel Scavenge 收集器 ](https://camo.githubusercontent.com/f298ba56ec4667487fdf4acc987f2ef9e6df254e/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f32323031383336382e6a7067)](https://camo.githubusercontent.com/f298ba56ec4667487fdf4acc987f2ef9e6df254e/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f32323031383336382e6a7067)
+
+##### 4.4.Serial Old 收集器
+
+**Serial 收集器的老年代版本**，它同样是一个单线程收集器。它主要有两大用途：一种用途是在 JDK1.5 以及以前的版本中与 Parallel Scavenge 收集器搭配使用，另一种用途是作为 CMS 收集器的后备方案。
+
+##### 4.5 Parallel Old 收集器
+
+**Parallel Scavenge 收集器的老年代版本**。使用多线程和“标记-整理”算法。在注重吞吐量以及 CPU 资源的场合，都可以优先考虑 Parallel Scavenge 收集器和 Parallel Old 收集器。
+
+##### 4.6 CMS 收集器
+
+**CMS（Concurrent Mark Sweep）收集器是一种以获取最短回收停顿时间为目标的收集器。它非常符合在注重用户体验的应用上使用。**
+
+**CMS（Concurrent Mark Sweep）收集器是 HotSpot 虚拟机第一款真正意义上的并发收集器，它第一次实现了让垃圾收集线程与用户线程（基本上）同时工作。**
+
+从名字中的**Mark Sweep**这两个词可以看出，CMS 收集器是一种 **“标记-清除”算法**实现的，它的运作过程相比于前面几种垃圾收集器来说更加复杂一些。整个过程分为四个步骤：
+
+- **初始标记：** 暂停所有的其他线程，并记录下直接与 root 相连的对象，速度很快 ；
+- **并发标记：** 同时开启 GC 和用户线程，用一个闭包结构去记录可达对象。但在这个阶段结束，这个闭包结构并不能保证包含当前所有的可达对象。因为用户线程可能会不断的更新引用域，所以 GC 线程无法保证可达性分析的实时性。所以这个算法里会跟踪记录这些发生引用更新的地方。
+- **重新标记：** 重新标记阶段就是为了修正并发标记期间因为用户程序继续运行而导致标记产生变动的那一部分对象的标记记录，这个阶段的停顿时间一般会比初始标记阶段的时间稍长，远远比并发标记阶段时间短
+- **并发清除：** 开启用户线程，同时 GC 线程开始对为标记的区域做清扫。
+
+[![CMS 垃圾收集器 ](https://camo.githubusercontent.com/d74545af0f987d17b7f41a60bb237a113fff925b/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f38323832353037392e6a7067)](https://camo.githubusercontent.com/d74545af0f987d17b7f41a60bb237a113fff925b/687474703a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f31382d382d32372f38323832353037392e6a7067)
+
+从它的名字就可以看出它是一款优秀的垃圾收集器，主要优点：**并发收集、低停顿**。但是它有下面三个明显的缺点：
+
+- **对 CPU 资源敏感；**
+- **无法处理浮动垃圾；**
+- **它使用的回收算法-“标记-清除”算法会导致收集结束时会有大量空间碎片产生。**
+
+##### 4.7 G1 收集器
+
+**G1 (Garbage-First) 是一款面向服务器的垃圾收集器,主要针对配备多颗处理器及大容量内存的机器. 以极高概率满足 GC 停顿时间要求的同时,还具备高吞吐量性能特征.**
+
+被视为 JDK1.7 中 HotSpot 虚拟机的一个重要进化特征。它具备一下特点：
+
+- **并行与并发**：G1 能充分利用 CPU、多核环境下的硬件优势，使用多个 CPU（CPU 或者 CPU 核心）来缩短 Stop-The-World 停顿时间。部分其他收集器原本需要停顿 Java 线程执行的 GC 动作，G1 收集器仍然可以通过并发的方式让 java 程序继续执行。
+- **分代收集**：虽然 G1 可以不需要其他收集器配合就能独立管理整个 GC 堆，但是还是保留了分代的概念。
+- **空间整合**：与 CMS 的“标记--清理”算法不同，G1 从整体来看是基于“标记整理”算法实现的收集器；从局部上来看是基于“复制”算法实现的。
+- **可预测的停顿**：这是 G1 相对于 CMS 的另一个大优势，降低停顿时间是 G1 和 CMS 共同的关注点，但 G1 除了追求低停顿外，还能建立可预测的停顿时间模型，能让使用者明确指定在一个长度为 M 毫秒的时间片段内。
+
+G1 收集器的运作大致分为以下几个步骤：
+
+- **初始标记**
+- **并发标记**
+- **最终标记**
+- **筛选回收**
+
+**G1 收集器在后台维护了一个优先列表，每次根据允许的收集时间，优先选择回收价值最大的 Region(这也就是它的名字 Garbage-First 的由来)**。这种使用 Region 划分内存空间以及有优先级的区域回收方式，保证了 GF 收集器在有限时间内可以尽可能高的收集效率（把内存化整为零）。
 
 
 
 
 
+### 三、JDK 监控和故障处理工具总结
+
+#### 1.JDK 命令行工具
+
+- **jps** (JVM Process Status）: 类似 UNIX 的 `ps` 命令。用户查看所有 Java 进程的启动类、传入参数和 Java 虚拟机参数等信息
+- **jstat**（ JVM Statistics Monitoring Tool）: 用于收集 HotSpot 虚拟机各方面的运行数据
+- **jinfo** (Configuration Info for Java) : Configuration Info forJava,显示虚拟机配置信息
+- **jmap** (Memory Map for Java) :生成堆转储快照
+- **jhat** (JVM Heap Dump Browser ) : 用于分析 heapdump 文件，它会建立一个 HTTP/HTML 服务器，让用户可以在浏览器上查看分析结果
+- **jstack** (Stack Trace for Java):生成虚拟机当前时刻的线程快照，线程快照就是当前虚拟机内每一条线程正在执行的方法堆栈的集合
+
+###### 1.1 `jps`:查看所有 Java 进程
+
+`jps`：显示虚拟机执行主类名称以及这些进程的本地虚拟机唯一 ID（Local Virtual Machine Identifier,LVMID）。`jps -q`：只输出进程的本地虚拟机唯一 ID。
+
+```Java
+C:\Users\SnailClimb>jps
+7360 NettyClient2
+17396
+7972 Launcher
+16504 Jps
+17340 NettyServer
+```
+
+`jps -l`:输出主类的全名，如果进程执行的是 Jar 包，输出 Jar 路径。
+
+```Java
+C:\Users\SnailClimb>jps -l
+7360 firstNettyDemo.NettyClient2
+17396
+7972 org.jetbrains.jps.cmdline.Launcher
+16492 sun.tools.jps.Jps
+17340 firstNettyDemo.NettyServer
+```
+
+`jps -v`：输出虚拟机进程启动时 JVM 参数。
+
+`jps -m`：输出传递给 Java 进程 main() 函数的参数。
 
 
 
+###### 1.2 `jstat`: 监视虚拟机各种运行状态信息
+
+jstat（JVM Statistics Monitoring Tool） 使用于监视虚拟机各种运行状态信息的命令行工具。 它可以显示本地或者远程（需要远程主机提供 RMI 支持）虚拟机进程中的类信息、内存、垃圾收集、JIT 编译等运行数据，在没有 GUI，只提供了纯文本控制台环境的服务器上，它将是运行期间定位虚拟机性能问题的首选工具。
+
+**jstat 命令使用格式：**
+
+```
+jstat -<option> [-t] [-h<lines>] <vmid> [<interval> [<count>]]
+```
+
+比如 `jstat -gc -h3 31736 1000 10`表示分析进程 id 为 31736 的 gc 情况，每隔 1000ms 打印一次记录，打印 10 次停止，每 3 行后打印指标头部。
+
+**常见的 option 如下：**
+
+- `jstat -class vmid` ：显示 ClassLoader 的相关信息；
+- `jstat -compiler vmid` ：显示 JIT 编译的相关信息；
+- `jstat -gc vmid` ：显示与 GC 相关的堆信息；
+- `jstat -gccapacity vmid` ：显示各个代的容量及使用情况；
+- `jstat -gcnew vmid` ：显示新生代信息；
+- `jstat -gcnewcapcacity vmid` ：显示新生代大小与使用情况；
+- `jstat -gcold vmid` ：显示老年代和永久代的信息；
+- `jstat -gcoldcapacity vmid` ：显示老年代的大小；
+- `jstat -gcpermcapacity vmid` ：显示永久代大小；
+- `jstat -gcutil vmid` ：显示垃圾收集信息；
+
+另外，加上 `-t`参数可以在输出信息上加一个 Timestamp 列，显示程序的运行时间。
+
+
+
+###### 1.3 `jinfo`: 实时地查看和调整虚拟机各项参数
+
+`jinfo vmid` :输出当前 jvm 进程的全部参数和系统属性 (第一部分是系统的属性，第二部分是 JVM 的参数)。
+
+`jinfo -flag name vmid` :输出对应名称的参数的具体值。比如输出 MaxHeapSize、查看当前 jvm 进程是否开启打印 GC 日志 ( `-XX:PrintGCDetails` :详细 GC 日志模式，这两个都是默认关闭的)。
+
+```Java
+C:\Users\SnailClimb>jinfo  -flag MaxHeapSize 17340
+-XX:MaxHeapSize=2124414976
+C:\Users\SnailClimb>jinfo  -flag PrintGC 17340
+-XX:-PrintGC
+```
+
+使用 jinfo 可以在不重启虚拟机的情况下，可以动态的修改 jvm 的参数。尤其在线上的环境特别有用,请看下面的例子：
+
+`jinfo -flag [+|-]name vmid` 开启或者关闭对应名称的参数。
+
+```Java
+C:\Users\SnailClimb>jinfo  -flag  PrintGC 17340
+-XX:-PrintGC
+
+C:\Users\SnailClimb>jinfo  -flag  +PrintGC 17340
+
+C:\Users\SnailClimb>jinfo  -flag  PrintGC 17340
+-XX:+PrintGC
+```
+
+### 
+
+###### 1.4 `jmap`:生成堆转储快照
+
+`jmap`（Memory Map for Java）命令用于生成堆转储快照。 如果不使用 `jmap` 命令，要想获取 Java 堆转储，可以使用 `“-XX:+HeapDumpOnOutOfMemoryError”` 参数，可以让虚拟机在 OOM 异常出现之后自动生成 dump 文件，Linux 命令下可以通过 `kill -3` 发送进程退出信号也能拿到 dump 文件。
+
+`jmap` 的作用并不仅仅是为了获取 dump 文件，它还可以查询 finalizer 执行队列、Java 堆和永久代的详细信息，如空间使用率、当前使用的是哪种收集器等。和`jinfo`一样，`jmap`有不少功能在 Windows 平台下也是受限制的。
+
+示例：将指定应用程序的堆快照输出到桌面。后面，可以通过 jhat、Visual VM 等工具分析该堆文件。
+
+```java
+C:\Users\SnailClimb>jmap -dump:format=b,file=C:\Users\SnailClimb\Desktop\heap.hprof 17340
+Dumping heap to C:\Users\SnailClimb\Desktop\heap.hprof ...
+Heap dump file created
+```
+
+
+
+###### **1.5 jhat**: 分析 heapdump 文件
+
+**jhat** 用于分析 heapdump 文件，它会建立一个 HTTP/HTML 服务器，让用户可以在浏览器上查看分析结果。
+
+```
+C:\Users\SnailClimb>jhat C:\Users\SnailClimb\Desktop\heap.hprof
+Reading from C:\Users\SnailClimb\Desktop\heap.hprof...
+Dump file created Sat May 04 12:30:31 CST 2019
+Snapshot read, resolving...
+Resolving 131419 objects...
+Chasing references, expect 26 dots..........................
+Eliminating duplicate references..........................
+Snapshot resolved.
+Started HTTP server on port 7000
+Server is ready.
+```
+
+
+
+###### **1.6 jstack** :生成虚拟机当前时刻的线程快照
+
+`jstack`（Stack Trace for Java）命令用于生成虚拟机当前时刻的线程快照。线程快照就是当前虚拟机内每一条线程正在执行的方法堆栈的集合.
+
+生成线程快照的目的主要是定位线程长时间出现停顿的原因，如线程间死锁、死循环、请求外部资源导致的长时间等待等都是导致线程长时间停顿的原因。线程出现停顿的时候通过`jstack`来查看各个线程的调用堆栈，就可以知道没有响应的线程到底在后台做些什么事情，或者在等待些什么资源。
+
+**下面是一个线程死锁的代码。我们下面会通过 jstack 命令进行死锁检查，输出死锁信息，找到发生死锁的线程。**
+
+```java
+public class DeadLockDemo {
+    private static Object resource1 = new Object();//资源 1
+    private static Object resource2 = new Object();//资源 2
+
+    public static void main(String[] args) {
+        new Thread(() -> {
+            synchronized (resource1) {
+                System.out.println(Thread.currentThread() + "get resource1");
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                System.out.println(Thread.currentThread() + "waiting get resource2");
+                synchronized (resource2) {
+                    System.out.println(Thread.currentThread() + "get resource2");
+                }
+            }
+        }, "线程 1").start();
+
+        new Thread(() -> {
+            synchronized (resource2) {
+                System.out.println(Thread.currentThread() + "get resource2");
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                System.out.println(Thread.currentThread() + "waiting get resource1");
+                synchronized (resource1) {
+                    System.out.println(Thread.currentThread() + "get resource1");
+                }
+            }
+        }, "线程 2").start();
+    }
+}
+```
+
+Output
+
+```java
+Thread[线程 1,5,main]get resource1
+Thread[线程 2,5,main]get resource2
+Thread[线程 1,5,main]waiting get resource2
+Thread[线程 2,5,main]waiting get resource1
+```
+
+线程 A 通过 synchronized (resource1) 获得 resource1 的监视器锁，然后通过` Thread.sleep(1000);`让线程 A 休眠 1s 为的是让线程 B 得到执行然后获取到 resource2 的监视器锁。线程 A 和线程 B 休眠结束了都开始企图请求获取对方的资源，然后这两个线程就会陷入互相等待的状态，这也就产生了死锁。
+
+**通过 jstack 命令分析：**
+
+```java
+C:\Users\SnailClimb>jps
+13792 KotlinCompileDaemon
+7360 NettyClient2
+17396
+7972 Launcher
+8932 Launcher
+9256 DeadLockDemo
+10764 Jps
+17340 NettyServer
+
+C:\Users\SnailClimb>jstack 9256
+```
+
+输出的部分内容如下：
+
+```java
+Found one Java-level deadlock:
+=============================
+"线程 2":
+  waiting to lock monitor 0x000000000333e668 (object 0x00000000d5efe1c0, a java.lang.Object),
+  which is held by "线程 1"
+"线程 1":
+  waiting to lock monitor 0x000000000333be88 (object 0x00000000d5efe1d0, a java.lang.Object),
+  which is held by "线程 2"
+
+Java stack information for the threads listed above:
+===================================================
+"线程 2":
+        at DeadLockDemo.lambda$main$1(DeadLockDemo.java:31)
+        - waiting to lock <0x00000000d5efe1c0> (a java.lang.Object)
+        - locked <0x00000000d5efe1d0> (a java.lang.Object)
+        at DeadLockDemo$$Lambda$2/1078694789.run(Unknown Source)
+        at java.lang.Thread.run(Thread.java:748)
+"线程 1":
+        at DeadLockDemo.lambda$main$0(DeadLockDemo.java:16)
+        - waiting to lock <0x00000000d5efe1d0> (a java.lang.Object)
+        - locked <0x00000000d5efe1c0> (a java.lang.Object)
+        at DeadLockDemo$$Lambda$1/1324119927.run(Unknown Source)
+        at java.lang.Thread.run(Thread.java:748)
+
+Found 1 deadlock.
+```
+
+可以看到 `jstack` 命令已经帮我们找到发生死锁的线程的具体信息。
+
+
+
+#### 2.JDK 可视化分析工具
+
+##### JConsole:Java 监视与管理控制台
+
+JConsole 是基于 JMX 的可视化监视、管理工具。可以很方便的监视本地及远程服务器的 java 进程的内存使用情况。你可以在控制台输出`jconsole`命令启动或者在 JDK 目录下的 bin 目录找到`jconsole.exe`然后双击启动。
+
+**连接 Jconsole**
+
+[![连接 Jconsole](https://camo.githubusercontent.com/a108b0807e218d06448dd7b3b86821299b498fcf/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f314a436f6e736f6c652545382542462539452545362538452541352e706e67)](https://camo.githubusercontent.com/a108b0807e218d06448dd7b3b86821299b498fcf/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f314a436f6e736f6c652545382542462539452545362538452541352e706e67)
+
+如果需要使用 JConsole 连接远程进程，可以在远程 Java 程序启动时加上下面这些参数:
+
+```
+-Djava.rmi.server.hostname=外网访问 ip 地址 
+-Dcom.sun.management.jmxremote.port=60001   //监控的端口号
+-Dcom.sun.management.jmxremote.authenticate=false   //关闭认证
+-Dcom.sun.management.jmxremote.ssl=false
+```
+
+在使用 JConsole 连接时，远程进程地址如下：
+
+```
+外网访问 ip 地址:60001 
+```
+
+**查看 Java 程序概况**
+
+[![查看 Java 程序概况 ](https://camo.githubusercontent.com/66f9893d2e4a18f63293f360393f11b2ad19269e/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f322545362539462541352545372539432538424a6176612545372541382538422545352542412538462545362541362538322545352538362542352e706e67)](https://camo.githubusercontent.com/66f9893d2e4a18f63293f360393f11b2ad19269e/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f322545362539462541352545372539432538424a6176612545372541382538422545352542412538462545362541362538322545352538362542352e706e67)
+
+**内存监控**
+
+JConsole 可以显示当前内存的详细信息。不仅包括堆内存/非堆内存的整体信息，还可以细化到 eden 区、survivor 区等的使用情况，如下图所示。
+
+点击右边的“执行 GC(G)”按钮可以强制应用程序执行一个 Full GC。
+
+> - **新生代 GC（Minor GC）**:指发生新生代的的垃圾收集动作，Minor GC 非常频繁，回收速度一般也比较快。
+> - **老年代 GC（Major GC/Full GC）**:指发生在老年代的 GC，出现了 Major GC 经常会伴随至少一次的 Minor GC（并非绝对），Major GC 的速度一般会比 Minor GC 的慢 10 倍以上。
+
+[![内存监控 ](https://camo.githubusercontent.com/67af8160bf285a050c33dc8688edfc382ba0ef4e/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f332545352538362538352545352541442539382545372539422539312545362538452541372e706e67)](https://camo.githubusercontent.com/67af8160bf285a050c33dc8688edfc382ba0ef4e/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f332545352538362538352545352541442539382545372539422539312545362538452541372e706e67)
+
+**线程监控**
+
+类似我们前面讲的 `jstack` 命令，不过这个是可视化的。
+
+最下面有一个"检测死锁 (D)"按钮，点击这个按钮可以自动为你找到发生死锁的线程以及它们的详细信息 。
+
+[![线程监控 ](https://camo.githubusercontent.com/ce47fa82d3c750b97869c04513cd4f8b36f25ee5/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f342545372542412542462545372541382538422545372539422539312545362538452541372e706e67)](https://camo.githubusercontent.com/ce47fa82d3c750b97869c04513cd4f8b36f25ee5/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f342545372542412542462545372541382538422545372539422539312545362538452541372e706e67)
+
+
+
+##### Visual VM:多合一故障处理工具
+
+VisualVM 提供在 Java 虚拟机 (Java Virutal Machine, JVM) 上运行的 Java 应用程序的详细信息。在 VisualVM 的图形用户界面中，您可以方便、快捷地查看多个 Java 应用程序的相关信息。Visual VM 官网：https://visualvm.github.io/ 。Visual VM 中文文档:https://visualvm.github.io/documentation.html。
+
+下面这段话摘自《深入理解 Java 虚拟机》。
+
+> VisualVM（All-in-One Java Troubleshooting Tool）是到目前为止随 JDK 发布的功能最强大的运行监视和故障处理程序，官方在 VisualVM 的软件说明中写上了“All-in-One”的描述字样，预示着他除了运行监视、故障处理外，还提供了很多其他方面的功能，如性能分析（Profiling）。VisualVM 的性能分析功能甚至比起 JProfiler、YourKit 等专业且收费的 Profiling 工具都不会逊色多少，而且 VisualVM 还有一个很大的优点：不需要被监视的程序基于特殊 Agent 运行，因此他对应用程序的实际性能的影响很小，使得他可以直接应用在生产环境中。这个优点是 JProfiler、YourKit 等工具无法与之媲美的。
+
+VisualVM 基于 NetBeans 平台开发，因此他一开始就具备了插件扩展功能的特性，通过插件扩展支持，VisualVM 可以做到：
+
+- **显示虚拟机进程以及进程的配置、环境信息（jps、jinfo）。**
+- **监视应用程序的 CPU、GC、堆、方法区以及线程的信息（jstat、jstack）。**
+- **dump 以及分析堆转储快照（jmap、jhat）。**
+- **方法级的程序运行性能分析，找到被调用最多、运行时间最长的方法。**
+- **离线程序快照：收集程序的运行时配置、线程 dump、内存 dump 等信息建立一个快照，可以将快照发送开发者处进行 Bug 反馈。**
+- **其他 plugins 的无限的可能性......**
+
+
+
+### 四、类文件结构
+
+在 Java 中，JVM 可以理解的代码就叫做`字节码`（即扩展名为 `.class` 的文件），它不面向任何特定的处理器，只面向虚拟机。Java 语言通过字节码的方式，在一定程度上解决了传统解释型语言执行效率低的问题，同时又保留了解释型语言可移植的特点。所以 Java 程序运行时比较高效，而且，由于字节码并不针对一种特定的机器，因此，Java 程序无须重新编译便可在多种不同操作系统的计算机上运行。
+
+Clojure（Lisp 语言的一种方言）、Groovy、Scala 等语言都是运行在 Java 虚拟机之上。下图展示了不同的语言被不同的编译器编译成`.class`文件最终运行在 Java 虚拟机之上。`.class`文件的二进制格式可以使用 [WinHex](https://www.x-ways.net/winhex/) 查看。
+
+[![Java虚拟机](https://camo.githubusercontent.com/13e15128fdac41fa66dfa608cd6ca3632f6bcc92/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f352f332f313633323562386531393066626162643f773d37313226683d33313626663d706e6726733d3137363433)](https://camo.githubusercontent.com/13e15128fdac41fa66dfa608cd6ca3632f6bcc92/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f352f332f313633323562386531393066626162643f773d37313226683d33313626663d706e6726733d3137363433)
+
+**可以说.class文件是不同的语言在 Java 虚拟机之间的重要桥梁，同时也是支持 Java 跨平台很重要的一个原因。**
+
+#### 1.Class 文件结构总结
+
+根据 Java 虚拟机规范，类文件由单个 ClassFile 结构组成：
+
+```java
+ClassFile {
+    u4             magic; //Class 文件的标志
+    u2             minor_version;//Class 的小版本号
+    u2             major_version;//Class 的大版本号
+    u2             constant_pool_count;//常量池的数量
+    cp_info        constant_pool[constant_pool_count-1];//常量池
+    u2             access_flags;//Class 的访问标记
+    u2             this_class;//当前类
+    u2             super_class;//父类
+    u2             interfaces_count;//接口
+    u2             interfaces[interfaces_count];//一个类可以实现多个接口
+    u2             fields_count;//Class 文件的字段属性
+    field_info     fields[fields_count];//一个类会可以有个字段
+    u2             methods_count;//Class 文件的方法数量
+    method_info    methods[methods_count];//一个类可以有个多个方法
+    u2             attributes_count;//此类的属性表中的属性数
+    attribute_info attributes[attributes_count];//属性表集合
+}
+```
+
+下面详细介绍一下 Class 文件结构涉及到的一些组件。
+
+**Class文件字节码结构组织示意图** （之前在网上保存的，非常不错，原出处不明）：
+
+[![类文件字节码结构组织示意图](https://camo.githubusercontent.com/b500a94627f72a03fd9ce4063cea156512110ade/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545372542312542422545362539362538372545342542422542362545352541442539372545382538412538322545372541302538312545372542422539332545362539452538342545372542422538342545372542422538372545372541342542412545362538342538462545352539422542452e706e67)](https://camo.githubusercontent.com/b500a94627f72a03fd9ce4063cea156512110ade/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545372542312542422545362539362538372545342542422542362545352541442539372545382538412538322545372541302538312545372542422539332545362539452538342545372542422538342545372542422538372545372541342542412545362538342538462545352539422542452e706e67)
+
+### 
+
+##### 1.1 魔数
+
+```Java
+    u4             magic; //Class 文件的标志
+```
+
+每个 Class 文件的头四个字节称为魔数（Magic Number）,它的唯一作用是**确定这个文件是否为一个能被虚拟机接收的 Class 文件**。
+
+程序设计者很多时候都喜欢用一些特殊的数字表示固定的文件类型或者其它特殊的含义。
+
+##### 1.2 Class 文件版本
+
+```Java
+    u2             minor_version;//Class 的小版本号
+    u2             major_version;//Class 的大版本号
+```
+
+紧接着魔数的四个字节存储的是 Class 文件的版本号：第五和第六是**次版本号**，第七和第八是**主版本号**。
+
+高版本的 Java 虚拟机可以执行低版本编译器生成的 Class 文件，但是低版本的 Java 虚拟机不能执行高版本编译器生成的 Class 文件。所以，我们在实际开发的时候要确保开发的的 JDK 版本和生产环境的 JDK 版本保持一致。
+
+##### 1.3 常量池
+
+```java
+    u2             constant_pool_count;//常量池的数量
+    cp_info        constant_pool[constant_pool_count-1];//常量池
+```
+
+紧接着主次版本号之后的是常量池，常量池的数量是 constant_pool_count-1（**常量池计数器是从1开始计数的，将第0项常量空出来是有特殊考虑的，索引值为0代表“不引用任何一个常量池项”**）。
+
+常量池主要存放两大常量：字面量和符号引用。字面量比较接近于 Java 语言层面的的常量概念，如文本字符串、声明为 final 的常量值等。而符号引用则属于编译原理方面的概念。包括下面三类常量：
+
+- 类和接口的全限定名
+- 字段的名称和描述符
+- 方法的名称和描述符
+
+常量池中每一项常量都是一个表，这14种表有一个共同的特点：**开始的第一位是一个 u1 类型的标志位 -tag 来标识常量的类型，代表当前这个常量属于哪种常量类型．**
+
+| 类型                             | 标志（tag） | 描述                   |
+| -------------------------------- | ----------- | ---------------------- |
+| CONSTANT_utf8_info               | 1           | UTF-8编码的字符串      |
+| CONSTANT_Integer_info            | 3           | 整形字面量             |
+| CONSTANT_Float_info              | 4           | 浮点型字面量           |
+| CONSTANT_Long_info               | ５          | 长整型字面量           |
+| CONSTANT_Double_info             | ６          | 双精度浮点型字面量     |
+| CONSTANT_Class_info              | ７          | 类或接口的符号引用     |
+| CONSTANT_String_info             | ８          | 字符串类型字面量       |
+| CONSTANT_Fieldref_info           | ９          | 字段的符号引用         |
+| CONSTANT_Methodref_info          | 10          | 类中方法的符号引用     |
+| CONSTANT_InterfaceMethodref_info | 11          | 接口中方法的符号引用   |
+| CONSTANT_NameAndType_info        | 12          | 字段或方法的符号引用   |
+| CONSTANT_MothodType_info         | 16          | 标志方法类型           |
+| CONSTANT_MethodHandle_info       | 15          | 表示方法句柄           |
+| CONSTANT_InvokeDynamic_info      | 18          | 表示一个动态方法调用点 |
+
+`.class` 文件可以通过`javap -v class类名` 指令来看一下其常量池中的信息(`javap -v class类名-> temp.txt` ：将结果输出到 temp.txt 文件)。
+
+##### 1.4 访问标志
+
+在常量池结束之后，紧接着的两个字节代表访问标志，这个标志用于识别一些类或者接口层次的访问信息，包括：这个 Class 是类还是接口，是否为 public 或者 abstract 类型，如果是类的话是否声明为 final 等等。
+
+类访问和属性修饰符:
+
+[![类访问和属性修饰符](https://camo.githubusercontent.com/d0969f48703bbba1434844b3f88f1319264ba0bf/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545382541452542462545392539372541452545362541302538372545352542462539372e706e67)](https://camo.githubusercontent.com/d0969f48703bbba1434844b3f88f1319264ba0bf/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545382541452542462545392539372541452545362541302538372545352542462539372e706e67)
+
+我们定义了一个 Employee 类
+
+```Java
+package top.snailclimb.bean;
+public class Employee {
+   ...
+}
+```
+
+通过`javap -v class类名` 指令来看一下类的访问标志。
+
+[![查看类的访问标志](https://camo.githubusercontent.com/bf262f108bdd85a5749576bd7b6c8a92d88a83df/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545362539462541352545372539432538422545372542312542422545372539412538342545382541452542462545392539372541452545362541302538372545352542462539372e706e67)](https://camo.githubusercontent.com/bf262f108bdd85a5749576bd7b6c8a92d88a83df/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545362539462541352545372539432538422545372542312542422545372539412538342545382541452542462545392539372541452545362541302538372545352542462539372e706e67)
+
+##### 1.5 当前类索引,父类索引与接口索引集合
+
+```Java
+    u2             this_class;//当前类
+    u2             super_class;//父类
+    u2             interfaces_count;//接口
+    u2             interfaces[interfaces_count];//一个雷可以实现多个接口
+```
+
+**类索引用于确定这个类的全限定名，父类索引用于确定这个类的父类的全限定名，由于 Java 语言的单继承，所以父类索引只有一个，除了 java.lang.Object 之外，所有的 java 类都有父类，因此除了 java.lang.Object 外，所有 Java 类的父类索引都不为 0。**
+
+**接口索引集合用来描述这个类实现了那些接口，这些被实现的接口将按implents(如果这个类本身是接口的话则是extends) 后的接口顺序从左到右排列在接口索引集合中。**
+
+##### 1.6 字段表集合
+
+```Java
+    u2             fields_count;//Class 文件的字段的个数
+    field_info     fields[fields_count];//一个类会可以有个字段
+```
+
+字段表（field info）用于描述接口或类中声明的变量。字段包括类级变量以及实例变量，但不包括在方法内部声明的局部变量。
+
+**field info(字段表) 的结构:**
+
+[![字段表的结构 ](https://camo.githubusercontent.com/1cad0f3668b8270bcbbda04647a4eb1e43a7cbc6/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545352541442539372545362541452542352545382541312541382545372539412538342545372542422539332545362539452538342e706e67)](https://camo.githubusercontent.com/1cad0f3668b8270bcbbda04647a4eb1e43a7cbc6/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545352541442539372545362541452542352545382541312541382545372539412538342545372542422539332545362539452538342e706e67)
+
+- **access_flags:** 字段的作用域（`public` ,`private`,`protected`修饰符），是实例变量还是类变量（`static`修饰符）,可否被序列化（transient 修饰符）,可变性（final）,可见性（volatile 修饰符，是否强制从主内存读写）。
+- **name_index:** 对常量池的引用，表示的字段的名称；
+- **descriptor_index:** 对常量池的引用，表示字段和方法的描述符；
+- **attributes_count:** 一个字段还会拥有一些额外的属性，attributes_count 存放属性的个数；
+- **attributes[attributes_count]:** 存放具体属性具体内容。
+
+上述这些信息中，各个修饰符都是布尔值，要么有某个修饰符，要么没有，很适合使用标志位来表示。而字段叫什么名字、字段被定义为什么数据类型这些都是无法固定的，只能引用常量池中常量来描述。
+
+**字段的 access_flags 的取值:**
+
+[![字段的access_flags的取值](https://camo.githubusercontent.com/66247c341a1faffa14aec0a92d222aaa90cd6fd1/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545352541442539372545362541452542352545372539412538346163636573735f666c6167732545372539412538342545352538462539362545352538302542432e706e67)](https://camo.githubusercontent.com/66247c341a1faffa14aec0a92d222aaa90cd6fd1/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545352541442539372545362541452542352545372539412538346163636573735f666c6167732545372539412538342545352538462539362545352538302542432e706e67)
+
+##### 1.7 方法表集合
+
+```Java
+    u2             methods_count;//Class 文件的方法的数量
+    method_info    methods[methods_count];//一个类可以有个多个方法
+```
+
+methods_count 表示方法的数量，而 method_info 表示的方法表。
+
+Class 文件存储格式中对方法的描述与对字段的描述几乎采用了完全一致的方式。方法表的结构如同字段表一样，依次包括了访问标志、名称索引、描述符索引、属性表集合几项。
+
+**method_info(方法表的) 结构:**
+
+[![方法表的结构](https://camo.githubusercontent.com/03e6436571ebbf65a41f2bf8eeda39fc3fe29646/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545362539362542392545362542332539352545382541312541382545372539412538342545372542422539332545362539452538342e706e67)](https://camo.githubusercontent.com/03e6436571ebbf65a41f2bf8eeda39fc3fe29646/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545362539362542392545362542332539352545382541312541382545372539412538342545372542422539332545362539452538342e706e67)
+
+**方法表的 access_flag 取值：**
+
+[![方法表的 access_flag 取值](https://camo.githubusercontent.com/1bcb16ea2bf8fc0787d0883a6b2de3b009075339/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545362539362542392545362542332539352545382541312541382545372539412538346163636573735f666c61672545372539412538342545362538392538302545362539432538392545362541302538372545352542462539372545342542442538442e706e67)](https://camo.githubusercontent.com/1bcb16ea2bf8fc0787d0883a6b2de3b009075339/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545362539362542392545362542332539352545382541312541382545372539412538346163636573735f666c61672545372539412538342545362538392538302545362539432538392545362541302538372545352542462539372545342542442538442e706e67)
+
+注意：因为`volatile`修饰符和`transient`修饰符不可以修饰方法，所以方法表的访问标志中没有这两个对应的标志，但是增加了`synchronized`、`native`、`abstract`等关键字修饰方法，所以也就多了这些关键字对应的标志。
+
+##### 1.8 属性表集合
+
+```Java
+   u2             attributes_count;//此类的属性表中的属性数
+   attribute_info attributes[attributes_count];//属性表集合
+```
+
+在 Class 文件，字段表，方法表中都可以携带自己的属性表集合，以用于描述某些场景专有的信息。与 Class 文件中其它的数据项目要求的顺序、长度和内容不同，属性表集合的限制稍微宽松一些，不再要求各个属性表具有严格的顺序，并且只要不与已有的属性名重复，任何人实现的编译器都可以向属性表中写 入自己定义的属性信息，Java 虚拟机运行时会忽略掉它不认识的属性。
 
 
 
@@ -2870,7 +3712,7 @@ void solveDoubleRed(TreeNode *pNode) {
 
    
 
-```php
+```java
 void solveLostBlack(TreeNode *pNode) {
         while (pNode != root && getColor(pNode) == black) {
             if (left(parent(pNode)) == pNode) {
