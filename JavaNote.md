@@ -3124,6 +3124,1535 @@ Class 文件存储格式中对方法的描述与对字段的描述几乎采用�
 
 
 
+### 五、类加载过程
+
+Class 文件需要加载到虚拟机中之后才能运行和使用，那么虚拟机是如何加载这些 Class 文件呢？
+
+系统加载 Class 类型的文件主要三步:**加载->连接->初始化**。连接过程又可分为三步:**验证->准备->解析**。
+
+[![类加载过程](https://camo.githubusercontent.com/9cb5a35384ed4da10079e3180e608828c7afe3a8/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545372542312542422545352538412541302545382542442542442545382542462538372545372541382538422e706e67)](https://camo.githubusercontent.com/9cb5a35384ed4da10079e3180e608828c7afe3a8/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545372542312542422545352538412541302545382542442542442545382542462538372545372541382538422e706e67)
+
+
+
+#### 1.加载
+
+类加载过程的第一步，主要完成下面3件事情：
+
+1. 通过全类名获取定义此类的二进制字节流
+2. 将字节流所代表的静态存储结构转换为方法区的运行时数据结构
+3. 在内存中生成一个代表该类的 Class 对象,作为方法区这些数据的访问入口
+
+虚拟机规范多上面这3点并不具体，因此是非常灵活的。比如："通过全类名获取定义此类的二进制字节流" 并没有指明具体从哪里获取、怎样获取。比如：比较常见的就是从 ZIP 包中读取（日后出现的JAR、EAR、WAR格式的基础）、其他文件生成（典型应用就是JSP）等等。
+
+**一个非数组类的加载阶段（加载阶段获取类的二进制字节流的动作）是可控性最强的阶段，这一步我们可以去完成还可以自定义类加载器去控制字节流的获取方式（重写一个类加载器的 loadClass() 方法）。数组类型不通过类加载器创建，它由 Java 虚拟机直接创建。**
+
+类加载器、双亲委派模型也是非常重要的知识点，这部分内容会在后面的文章中单独介绍到。
+
+**加载阶段和连接阶段的部分内容是交叉进行的，加载阶段尚未结束，连接阶段可能就已经开始了。**
+
+#### 2.验证
+
+[![验证阶段示意图](https://camo.githubusercontent.com/6175c9d001e4fb2bc0c1c49c0bd4a8d280e90846/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545392541412538432545382541462538312545392539382542362545362541452542352e706e67)](https://camo.githubusercontent.com/6175c9d001e4fb2bc0c1c49c0bd4a8d280e90846/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545392541412538432545382541462538312545392539382542362545362541452542352e706e67)
+
+#### 3.准备
+
+**准备阶段是正式为类变量分配内存并设置类变量初始值的阶段**，这些内存都将在方法区中分配。对于该阶段有以下几点需要注意：
+
+1. 这时候进行内存分配的仅包括**类变量（static）**，而不包括实例变量，实例变量会在对象实例化时随着对象一块分配在 Java 堆中。
+2. 这里所设置的初始值"通常情况"下是数据类型默认的零值（如0、0L、null、false等），比如我们定义了`public static int value=111` ，那么 value 变量在准备阶段的初始值就是 0 而不是111（初始化阶段才会复制）。特殊情况：比如给 value 变量加上了 fianl 关键字`public static final int value=111` ，那么准备阶段 value 的值就被复制为 111。
+
+**基本数据类型的零值：**
+
+[![基本数据类型的零值](https://camo.githubusercontent.com/689e28f80449f103b217a87affc6c14a10974722/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545352539462542412545362539432541432545362539352542302545362538442541452545372542312542422545352539452538422545372539412538342545392539422542362545352538302542432e706e67)](https://camo.githubusercontent.com/689e28f80449f103b217a87affc6c14a10974722/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545352539462542412545362539432541432545362539352542302545362538442541452545372542312542422545352539452538422545372539412538342545392539422542362545352538302542432e706e67)
+
+#### 4.解析
+
+**解析阶段是虚拟机将常量池内的符号引用替换为直接引用的过程**。解析动作主要针对类或接口、字段、类方法、接口方法、方法类型、方法句柄和调用限定符7类符号引用进行。
+
+符号引用就是一组符号来描述目标，可以是任何字面量。**直接引用**就是直接指向目标的指针、相对偏移量或一个间接定位到目标的句柄。在程序实际运行时，只有符号引用是不够的，举个例子：在程序执行方法时，系统需要明确知道这个方法所在的位置。**Java 虚拟机为每个类都准备了一张方法表来存放类中所有的方法。当需要调用一个类的方法的时候，只要知道这个方法在方发表中的偏移量就可以直接调用该方法了。**通过解析操作符号引用就可以直接转变为目标方法在类中方法表的位置，从而使得方法可以被调用。
+
+**综上，解析阶段是虚拟机将常量池内的符号引用替换为直接引用的过程，也就是得到类或者字段、方法在内存中的指针或者偏移量。**
+
+#### 5.初始化
+
+初始化是类加载的最后一步，也是真正执行类中定义的 Java 程序代码(字节码)，初始化阶段是执行类构造器 `<clinit> ()`方法的过程。
+
+对于`<clinit>（）` 方法的调用，虚拟机会自己确保其在多线程环境中的安全性。因为 `<clinit>（）` 方法是带锁线程安全，所以在多线程环境下进行类初始化的话可能会引起死锁，并且这种死锁很难被发现。
+
+对于初始化阶段，虚拟机严格规范了有且只有5种情况下，必须对类进行初始化：
+
+1. 当遇到 new 、 getstatic、putstatic或invokestatic 这4条直接码指令时，比如 new 一个类，读取一个静态字段(未被 final 修饰)、或调用一个类的静态方法时。
+2. 使用 `java.lang.reflect` 包的方法对类进行反射调用时 ，如果类没初始化，需要触发其初始化。
+3. 初始化一个类，如果其父类还未初始化，则先触发该父类的初始化。
+4. 当虚拟机启动时，用户需要定义一个要执行的主类 (包含 main 方法的那个类)，虚拟机会先初始化这个类。
+5. 当使用 JDK1.7 的动态动态语言时，如果一个 MethodHandle 实例的最后解析结构为 REF_getStatic、REF_putStatic、REF_invokeStatic、的方法句柄，并且这个句柄没有初始化，则需要先触发器初始化。
+
+
+
+### 六、类加载器
+
+
+类加载过程：**加载->连接->初始化**。连接过程又可分为三步:**验证->准备->解析**。
+
+[![类加载过程](https://camo.githubusercontent.com/9cb5a35384ed4da10079e3180e608828c7afe3a8/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545372542312542422545352538412541302545382542442542442545382542462538372545372541382538422e706e67)](https://camo.githubusercontent.com/9cb5a35384ed4da10079e3180e608828c7afe3a8/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f2545372542312542422545352538412541302545382542442542442545382542462538372545372541382538422e706e67)
+
+**一个非数组类的加载阶段**（加载阶段获取类的二进制字节流的动作）是可控性最强的阶段，这一步我们可以去完成还可以自定义类加载器去控制字节流的获取方式（重写一个类加载器的 `loadClass()` 方法）。数组类型不通过类加载器创建，它由 Java 虚拟机直接创建。
+
+所有的类都由类加载器加载，加载的作用就是将 .class文件加载到内存。
+
+JVM 中内置了三个重要的 ClassLoader，除了 BootstrapClassLoader 其他类加载器均由 Java 实现且全部继承自`java.lang.ClassLoader`：
+
+1. **BootstrapClassLoader(启动类加载器)** ：最顶层的加载类，由C++实现，负责加载 `%JAVA_HOME%/lib`目录下的jar包和类或者或被 `-Xbootclasspath`参数指定的路径中的所有类。
+2. **ExtensionClassLoader(扩展类加载器)** ：主要负责加载目录 `%JRE_HOME%/lib/ext` 目录下的jar包和类，或被 `java.ext.dirs` 系统变量所指定的路径下的jar包。
+3. **AppClassLoader(应用程序类加载器)** :面向我们用户的加载器，负责加载当前应用classpath下的所有jar包和类。
+
+
+
+#### 双亲委派模型
+
+每一个类都有一个对应它的类加载器。系统中的 ClassLoder 在协同工作的时候会默认使用 **双亲委派模型** 。即在类加载的时候，系统会首先判断当前类是否被加载过。已经被加载的类会直接返回，否则才会尝试加载。加载的时候，首先会把该请求委派该父类加载器的 `loadClass()` 处理，因此所有的请求最终都应该传送到顶层的启动类加载器 `BootstrapClassLoader` 中。当父类加载器无法处理时，才由自己来处理。当父类加载器为null时，会使用启动类加载器 `BootstrapClassLoader` 作为父类加载器。
+
+[![ClassLoader](https://camo.githubusercontent.com/4311721b0968c1b9fd63bdc0acf11d7358a52ff6/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f636c6173736c6f616465725f5750532545352539422542452545372538392538372e706e67)](https://camo.githubusercontent.com/4311721b0968c1b9fd63bdc0acf11d7358a52ff6/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d362f636c6173736c6f616465725f5750532545352539422542452545372538392538372e706e67)
+
+每个类加载都有一个父类加载器，我们通过下面的程序来验证。
+
+```Java
+public class ClassLoaderDemo {
+    public static void main(String[] args) {
+        System.out.println("ClassLodarDemo's ClassLoader is " + ClassLoaderDemo.class.getClassLoader());
+        System.out.println("The Parent of ClassLodarDemo's ClassLoader is " + ClassLoaderDemo.class.getClassLoader().getParent());
+        System.out.println("The GrandParent of ClassLodarDemo's ClassLoader is " + ClassLoaderDemo.class.getClassLoader().getParent().getParent());
+    }
+}
+```
+
+Output
+
+```Java
+ClassLodarDemo's ClassLoader is sun.misc.Launcher$AppClassLoader@18b4aac2
+The Parent of ClassLodarDemo's ClassLoader is sun.misc.Launcher$ExtClassLoader@1b6d3586
+The GrandParent of ClassLodarDemo's ClassLoader is null
+```
+
+`AppClassLoader`的父类加载器为`ExtClassLoader` `ExtClassLoader`的父类加载器为null，**null并不代表ExtClassLoader没有父类加载器，而是 BootstrapClassLoader** 。
+
+其实这个双亲翻译的容易让别人误解，我们一般理解的双亲都是父母，这里的双亲更多地表达的是“父母这一辈”的人而已，并不是说真的有一个 Mother ClassLoader 和一个 Father ClassLoader 。另外，类加载器之间的“父子”关系也不是通过继承来体现的，是由“优先级”来决定。官方API文档对这部分的描述如下:
+
+> The Java platform uses a delegation model for loading classes. **The basic idea is that every class loader has a "parent" class loader.** When loading a class, a class loader first "delegates" the search for the class to its parent class loader before attempting to find the class itself.
+
+#### 双亲委派模型实现源码分析
+
+双亲委派模型的实现代码非常简单，逻辑非常清晰，都集中在 `java.lang.ClassLoader` 的 `loadClass()` 中，相关代码如下所示。
+
+```Java
+private final ClassLoader parent; 
+protected Class<?> loadClass(String name, boolean resolve)
+        throws ClassNotFoundException
+    {
+        synchronized (getClassLoadingLock(name)) {
+            // 首先，检查请求的类是否已经被加载过
+            Class<?> c = findLoadedClass(name);
+            if (c == null) {
+                long t0 = System.nanoTime();
+                try {
+                    if (parent != null) {//父加载器不为空，调用父加载器loadClass()方法处理
+                        c = parent.loadClass(name, false);
+                    } else {//父加载器为空，使用启动类加载器 BootstrapClassLoader 加载
+                        c = findBootstrapClassOrNull(name);
+                    }
+                } catch (ClassNotFoundException e) {
+                   //抛出异常说明父类加载器无法完成加载请求
+                }
+                
+                if (c == null) {
+                    long t1 = System.nanoTime();
+                    //自己尝试加载
+                    c = findClass(name);
+
+                    // this is the defining class loader; record the stats
+                    sun.misc.PerfCounter.getParentDelegationTime().addTime(t1 - t0);
+                    sun.misc.PerfCounter.getFindClassTime().addElapsedTimeFrom(t1);
+                    sun.misc.PerfCounter.getFindClasses().increment();
+                }
+            }
+            if (resolve) {
+                resolveClass(c);
+            }
+            return c;
+        }
+    }
+```
+
+#### 双亲委派模型的好处
+
+双亲委派模型保证了Java程序的稳定运行，可以避免类的重复加载（**JVM 区分不同类的方式不仅仅根据类名，相同的类文件被不同的类加载器加载产生的是两个不同的类**），也保证了 Java 的核心 API 不被篡改。如果没有使用双亲委派模型，而是每个类加载器加载自己的话就会出现一些问题，比如我们编写一个称为 `java.lang.Object` 类的话，那么程序运行的时候，系统就会出现多个不同的 `Object` 类。
+
+#### 如果我们不想用双亲委派模型怎么办？
+
+为了避免双亲委托机制，我们可以自己定义一个类加载器，然后重写 `loadClass()` 即可。
+
+#### 自定义类加载器
+
+除了 `BootstrapClassLoader` 其他类加载器均由 Java 实现且全部继承自`java.lang.ClassLoader`。如果我们要自定义自己的类加载器，很明显需要继承 `ClassLoader`。
+
+
+
+
+
+## I/O
+
+### BIO,NIO,AIO 总结
+
+Java 中的 BIO、NIO和 AIO 理解为是 Java 语言对操作系统的各种 IO 模型的封装。程序员在使用这些 API 的时候，不需要关心操作系统层面的知识，也不需要根据不同操作系统编写不同的代码。只需要使用Java的API就可以了。
+
+在讲 BIO,NIO,AIO 之前先来回顾一下这样几个概念：同步与异步，阻塞与非阻塞。
+
+**同步与异步**
+
+- **同步：** 同步就是发起一个调用后，被调用者未处理完请求之前，调用不返回。
+- **异步：** 异步就是发起一个调用后，立刻得到被调用者的回应表示已接收到请求，但是被调用者并没有返回结果，此时我们可以处理其他的请求，被调用者通常依靠事件，回调等机制来通知调用者其返回结果。
+
+同步和异步的区别最大在于异步的话调用者不需要等待处理结果，被调用者会通过回调等机制来通知调用者其返回结果。
+
+**阻塞和非阻塞**
+
+- **阻塞：** 阻塞就是发起一个请求，调用者一直等待请求结果返回，也就是当前线程会被挂起，无法从事其他任务，只有当条件就绪才能继续。
+- **非阻塞：** 非阻塞就是发起一个请求，调用者不用一直等着结果返回，可以先去干其他事情。
+
+#### 1. BIO (Blocking I/O)
+
+同步阻塞I/O模式，数据的读取写入必须阻塞在一个线程内等待其完成。
+
+##### 1.1 传统 BIO
+
+BIO通信（一请求一应答）模型图如下(图源网络，原出处不明)：
+
+[![传统BIO通信模型图](https://camo.githubusercontent.com/5ef6de9824ae82bb0c403522a647953d1193a362/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f322e706e67)](https://camo.githubusercontent.com/5ef6de9824ae82bb0c403522a647953d1193a362/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f322e706e67)
+
+采用 **BIO 通信模型** 的服务端，通常由一个独立的 Acceptor 线程负责监听客户端的连接。我们一般通过在`while(true)` 循环中服务端会调用 `accept()` 方法等待接收客户端的连接的方式监听请求，请求一旦接收到一个连接请求，就可以建立通信套接字在这个通信套接字上进行读写操作，此时不能再接收其他客户端连接请求，只能等待同当前连接的客户端的操作执行完成， 不过可以通过多线程来支持多个客户端的连接，如上图所示。
+
+如果要让 **BIO 通信模型** 能够同时处理多个客户端请求，就必须使用多线程（主要原因是`socket.accept()`、`socket.read()`、`socket.write()` 涉及的三个主要函数都是同步阻塞的），也就是说它在接收到客户端连接请求之后为每个客户端创建一个新的线程进行链路处理，处理完成之后，通过输出流返回应答给客户端，线程销毁。这就是典型的 **一请求一应答通信模型** 。我们可以设想一下如果这个连接不做任何事情的话就会造成不必要的线程开销，不过可以通过 **线程池机制** 改善，线程池还可以让线程的创建和回收成本相对较低。使用`FixedThreadPool` 可以有效的控制了线程的最大数量，保证了系统有限的资源的控制，实现了N(客户端请求数量):M(处理客户端请求的线程数量)的伪异步I/O模型（N 可以远远大于 M），下面一节"伪异步 BIO"中会详细介绍到。
+
+**我们再设想一下当客户端并发访问量增加后这种模型会出现什么问题？**
+
+在 Java 虚拟机中，线程是宝贵的资源，线程的创建和销毁成本很高，除此之外，线程的切换成本也是很高的。尤其在 Linux 这样的操作系统中，线程本质上就是一个进程，创建和销毁线程都是重量级的系统函数。如果并发访问量增加会导致线程数急剧膨胀可能会导致线程堆栈溢出、创建新线程失败等问题，最终导致进程宕机或者僵死，不能对外提供服务。
+
+##### 1.2 伪异步 IO
+
+为了解决同步阻塞I/O面临的一个链路需要一个线程处理的问题，后来有人对它的线程模型进行了优化一一一后端通过一个线程池来处理多个客户端的请求接入，形成客户端个数M：线程池最大线程数N的比例关系，其中M可以远远大于N.通过线程池可以灵活地调配线程资源，设置线程的最大值，防止由于海量并发接入导致线程耗尽。
+
+伪异步IO模型图(图源网络，原出处不明)：
+
+[![伪异步IO模型图](https://camo.githubusercontent.com/04b258a50ca7f9762f43d64e70f4489440bae4eb/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f332e706e67)](https://camo.githubusercontent.com/04b258a50ca7f9762f43d64e70f4489440bae4eb/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f332e706e67)
+
+采用线程池和任务队列可以实现一种叫做伪异步的 I/O 通信框架，它的模型图如上图所示。当有新的客户端接入时，将客户端的 Socket 封装成一个Task（该任务实现java.lang.Runnable接口）投递到后端的线程池中进行处理，JDK 的线程池维护一个消息队列和 N 个活跃线程，对消息队列中的任务进行处理。由于线程池可以设置消息队列的大小和最大线程数，因此，它的资源占用是可控的，无论多少个客户端并发访问，都不会导致资源的耗尽和宕机。
+
+伪异步I/O通信框架采用了线程池实现，因此避免了为每个请求都创建一个独立线程造成的线程资源耗尽问题。不过因为它的底层仍然是同步阻塞的BIO模型，因此无法从根本上解决问题。
+
+##### 1.3 代码示例
+
+下面代码中演示了BIO通信（一请求一应答）模型。我们会在客户端创建多个线程依次连接服务端并向其发送"当前时间+:hello world"，服务端会为每个客户端线程创建一个线程来处理。代码示例出自闪电侠的博客，原地址如下：
+
+https://www.jianshu.com/p/a4e03835921a
+
+**客户端**
+
+```java 
+/**
+ * 
+ * @author 闪电侠
+ * @date 2018年10月14日
+ * @Description:客户端
+ */
+public class IOClient {
+
+  public static void main(String[] args) {
+    // TODO 创建多个线程，模拟多个客户端连接服务端
+    new Thread(() -> {
+      try {
+        Socket socket = new Socket("127.0.0.1", 3333);
+        while (true) {
+          try {
+            socket.getOutputStream().write((new Date() + ": hello world").getBytes());
+            Thread.sleep(2000);
+          } catch (Exception e) {
+          }
+        }
+      } catch (IOException e) {
+      }
+    }).start();
+
+  }
+
+}
+```
+
+**服务端**
+
+```java
+/**
+ * @author 闪电侠
+ * @date 2018年10月14日
+ * @Description: 服务端
+ */
+public class IOServer {
+
+  public static void main(String[] args) throws IOException {
+    // TODO 服务端处理客户端连接请求
+    ServerSocket serverSocket = new ServerSocket(3333);
+
+    // 接收到客户端连接请求之后为每个客户端创建一个新的线程进行链路处理
+    new Thread(() -> {
+      while (true) {
+        try {
+          // 阻塞方法获取新的连接
+          Socket socket = serverSocket.accept();
+
+          // 每一个新的连接都创建一个线程，负责读取数据
+          new Thread(() -> {
+            try {
+              int len;
+              byte[] data = new byte[1024];
+              InputStream inputStream = socket.getInputStream();
+              // 按字节流方式读取数据
+              while ((len = inputStream.read(data)) != -1) {
+                System.out.println(new String(data, 0, len));
+              }
+            } catch (IOException e) {
+            }
+          }).start();
+
+        } catch (IOException e) {
+        }
+
+      }
+    }).start();
+
+  }
+
+}
+```
+
+##### 1.4 总结
+
+在活动连接数不是特别高（**小于单机1000**）的情况下，这种模型是比较不错的，可以让每一个连接专注于自己的 I/O 并且编程模型简单，也不用过多考虑系统的过载、限流等问题。线程池本身就是一个天然的漏斗，可以缓冲一些系统处理不了的连接或请求。但是，**当面对十万甚至百万级连接的时候**，传统的 BIO 模型是无能为力的。因此，我们需要一种更高效的 I/O 处理模型来应对更高的并发量。
+
+
+
+#### 2. NIO (New I/O)
+
+##### 2.1 NIO 简介
+
+NIO是一种同步非阻塞的I/O模型，在Java 1.4 中引入了NIO框架，对应 java.nio 包，提供了 Channel , Selector，Buffer等抽象。
+
+NIO中的N可以理解为Non-blocking，不单纯是New。它支持面向缓冲的，基于通道的I/O操作方法。 NIO提供了与传统BIO模型中的 `Socket` 和 `ServerSocket` 相对应的 `SocketChannel` 和 `ServerSocketChannel` 两种不同的套接字通道实现,两种通道都支持阻塞和非阻塞两种模式。阻塞模式使用就像传统中的支持一样，比较简单，但是性能和可靠性都不好；非阻塞模式正好与之相反。对于低负载、低并发的应用程序，可以使用同步阻塞I/O来提升开发速率和更好的维护性；对于高负载、高并发的（网络）应用，应使用 NIO 的非阻塞模式来开发。
+
+##### 2.2 NIO的特性/NIO与IO区别
+
+如果是在面试中回答这个问题，我觉得首先肯定要从 NIO 流是非阻塞 IO 而 IO 流是阻塞 IO 说起。然后，可以从 NIO 的3个核心组件/特性为 NIO 带来的一些改进来分析。如果，你把这些都回答上了我觉得你对于 NIO 就有了更为深入一点的认识，面试官问到你这个问题，你也能很轻松的回答上来了。
+
+**IO流是阻塞的，NIO流是不阻塞的。**
+
+Java NIO使我们可以进行非阻塞IO操作。比如说，单线程中从通道读取数据到buffer，同时可以继续做别的事情，当数据读取到buffer中后，线程再继续处理数据。写数据也是一样的。另外，非阻塞写也是如此。一个线程请求写入一些数据到某通道，但不需要等待它完全写入，这个线程同时可以去做别的事情。
+
+Java IO的各种流是阻塞的。这意味着，当一个线程调用 `read()` 或 `write()` 时，该线程被阻塞，直到有一些数据被读取，或数据完全写入。该线程在此期间不能再干任何事情了
+
+**IO 面向流(Stream oriented)，而 NIO 面向缓冲区(Buffer oriented)。**
+
+Buffer是一个对象，它包含一些要写入或者要读出的数据。在NIO类库中加入Buffer对象，体现了新库与原I/O的一个重要区别。在面向流的I/O中·可以将数据直接写入或者将数据直接读到 Stream 对象中。虽然 Stream 中也有 Buffer 开头的扩展类，但只是流的包装类，还是从流读到缓冲区，而 NIO 却是直接读到 Buffer 中进行操作。
+
+在NIO厍中，所有数据都是用缓冲区处理的。在读取数据时，它是直接读到缓冲区中的; 在写入数据时，写入到缓冲区中。任何时候访问NIO中的数据，都是通过缓冲区进行操作。
+
+最常用的缓冲区是 ByteBuffer,一个 ByteBuffer 提供了一组功能用于操作 byte 数组。除了ByteBuffer,还有其他的一些缓冲区，事实上，每一种Java基本类型（除了Boolean类型）都对应有一种缓冲区。
+
+**channel通道**
+
+NIO 通过Channel（通道） 进行读写。
+
+通道是双向的，可读也可写，而流的读写是单向的。无论读写，通道只能和Buffer交互。因为 Buffer，通道可以异步地读写。
+
+**Selector (选择器)**
+
+NIO有选择器，而IO没有。
+
+选择器用于使用单个线程处理多个通道。因此，它需要较少的线程来处理这些通道。线程之间的切换对于操作系统来说是昂贵的。 因此，为了提高系统效率选择器是有用的。
+
+[![一个单线程中Selector维护3个Channel的示意图](https://camo.githubusercontent.com/3a68153ce17be90275df07a47409afaea91aff83/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d322f536c6563746f722e706e67)](https://camo.githubusercontent.com/3a68153ce17be90275df07a47409afaea91aff83/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d322f536c6563746f722e706e67)
+
+
+
+##### 2.3 NIO 读数据和写数据方式
+
+通常来说NIO中的所有IO都是从 Channel（通道） 开始的。
+
+- 从通道进行数据读取 ：创建一个缓冲区，然后请求通道读取数据。
+- 从通道进行数据写入 ：创建一个缓冲区，填充数据，并要求通道写入数据。
+
+数据读取和写入操作图示：
+
+[![NIO读写数据的方式](https://camo.githubusercontent.com/33ad8802c0f295f567c7432de3a58a014b27fa51/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d322f4e494f2545382541462542422545352538362539392545362539352542302545362538442541452545372539412538342545362539362542392545352542432538462e706e67)](https://camo.githubusercontent.com/33ad8802c0f295f567c7432de3a58a014b27fa51/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d322f4e494f2545382541462542422545352538362539392545362539352542302545362538442541452545372539412538342545362539362542392545352542432538462e706e67)
+
+##### 2.4 NIO核心组件简单介绍
+
+NIO 包含下面几个核心的组件：
+
+- Channel(通道)
+- Buffer(缓冲区)
+- Selector(选择器)
+
+整个NIO体系包含的类远远不止这三个，只能说这三个是NIO体系的“核心API”。我们上面已经对这三个概念进行了基本的阐述，这里就不多做解释了。
+
+##### 2.5 代码示例
+
+https://www.jianshu.com/p/a4e03835921a
+
+客户端 IOClient.java 的代码不变，我们对服务端使用 NIO 进行改造。以下代码较多而且逻辑比较复杂，大家看看就好。
+
+```Java
+/**
+ * 
+ * @author 闪电侠
+ * @date 2019年2月21日
+ * @Description: NIO 改造后的服务端
+ */
+public class NIOServer {
+  public static void main(String[] args) throws IOException {
+    // 1. serverSelector负责轮询是否有新的连接，服务端监测到新的连接之后，不再创建一个新的线程，
+    // 而是直接将新连接绑定到clientSelector上，这样就不用 IO 模型中 1w 个 while 循环在死等
+    Selector serverSelector = Selector.open();
+    // 2. clientSelector负责轮询连接是否有数据可读
+    Selector clientSelector = Selector.open();
+
+    new Thread(() -> {
+      try {
+        // 对应IO编程中服务端启动
+        ServerSocketChannel listenerChannel = ServerSocketChannel.open();
+        listenerChannel.socket().bind(new InetSocketAddress(3333));
+        listenerChannel.configureBlocking(false);
+        listenerChannel.register(serverSelector, SelectionKey.OP_ACCEPT);
+
+        while (true) {
+          // 监测是否有新的连接，这里的1指的是阻塞的时间为 1ms
+          if (serverSelector.select(1) > 0) {
+            Set<SelectionKey> set = serverSelector.selectedKeys();
+            Iterator<SelectionKey> keyIterator = set.iterator();
+
+            while (keyIterator.hasNext()) {
+              SelectionKey key = keyIterator.next();
+
+              if (key.isAcceptable()) {
+                try {
+                  // (1) 每来一个新连接，不需要创建一个线程，而是直接注册到clientSelector
+                  SocketChannel clientChannel = ((ServerSocketChannel) key.channel()).accept();
+                  clientChannel.configureBlocking(false);
+                  clientChannel.register(clientSelector, SelectionKey.OP_READ);
+                } finally {
+                  keyIterator.remove();
+                }
+              }
+
+            }
+          }
+        }
+      } catch (IOException ignored) {
+      }
+    }).start();
+    new Thread(() -> {
+      try {
+        while (true) {
+          // (2) 批量轮询是否有哪些连接有数据可读，这里的1指的是阻塞的时间为 1ms
+          if (clientSelector.select(1) > 0) {
+            Set<SelectionKey> set = clientSelector.selectedKeys();
+            Iterator<SelectionKey> keyIterator = set.iterator();
+
+            while (keyIterator.hasNext()) {
+              SelectionKey key = keyIterator.next();
+
+              if (key.isReadable()) {
+                try {
+                  SocketChannel clientChannel = (SocketChannel) key.channel();
+                  ByteBuffer byteBuffer = ByteBuffer.allocate(1024);
+                  // (3) 面向 Buffer
+                  clientChannel.read(byteBuffer);
+                  byteBuffer.flip();
+                  System.out.println(
+                      Charset.defaultCharset().newDecoder().decode(byteBuffer).toString());
+                } finally {
+                  keyIterator.remove();
+                  key.interestOps(SelectionKey.OP_READ);
+                }
+              }
+
+            }
+          }
+        }
+      } catch (IOException ignored) {
+      }
+    }).start();
+
+  }
+}
+```
+
+为什么大家都不愿意用 JDK 原生 NIO 进行开发呢？从上面的代码中大家都可以看出来，是真的难用！除了编程复杂、编程模型难之外，它还有以下让人诟病的问题：
+
+- JDK 的 NIO 底层由 epoll 实现，该实现饱受诟病的空轮询 bug 会导致 cpu 飙升 100%
+- 项目庞大之后，自行实现的 NIO 很容易出现各类 bug，维护成本较高，上面这一坨代码我都不能保证没有 bug
+
+Netty 的出现很大程度上改善了 JDK 原生 NIO 所存在的一些让人难以忍受的问题。
+
+#### 3. AIO (Asynchronous I/O)
+
+AIO 也就是 NIO 2。在 Java 7 中引入了 NIO 的改进版 NIO 2,它是异步非阻塞的IO模型。异步 IO 是基于事件和回调机制实现的，也就是应用操作之后会直接返回，不会堵塞在那里，当后台处理完成，操作系统会通知相应的线程进行后续的操作。
+
+AIO 是异步IO的缩写，虽然 NIO 在网络操作中，提供了非阻塞的方法，但是 NIO 的 IO 行为还是同步的。对于 NIO 来说，我们的业务线程是在 IO 操作准备好时，得到通知，接着就由这个线程自行进行 IO 操作，IO操作本身是同步的。（除了 AIO 其他的 IO 类型都是同步的，这一点可以从底层IO线程模型解释，推荐一篇文章：[《漫话：如何给女朋友解释什么是Linux的五种IO模型？》](https://mp.weixin.qq.com/s?__biz=Mzg3MjA4MTExMw==&mid=2247484746&idx=1&sn=c0a7f9129d780786cabfcac0a8aa6bb7&source=41#wechat_redirect) ）
+
+查阅网上相关资料，我发现就目前来说 AIO 的应用还不是很广泛，Netty 之前也尝试使用过 AIO，不过又放弃了。
+
+
+
+### I/O总结分类
+
+#### 分类一：按操作方式（类结构）
+
+**字节流和字符流：**
+
+- 字节流：以字节为单位，每次次读入或读出是8位数据。可以读任何类型数据。
+- 字符流：以字符为单位，每次次读入或读出是16位数据。其只能读取字符类型数据。
+
+**输出流和输入流：**
+
+- 输出流：从内存读出到文件。只能进行写操作。
+- 输入流：从文件读入到内存。只能进行读操作。
+
+**注意：** 这里的出和入，都是相对于系统内存而言的。
+
+**节点流和处理流：**
+
+- 节点流：直接与数据源相连，读入或读出。
+- 处理流：与节点流一块使用，在节点流的基础上，再套接一层，套接在节点流上的就是处理流。
+
+**为什么要有处理流？**直接使用节点流，读写不方便，为了更快的读写文件，才有了处理流。
+
+#### 按操作方式分类结构图：
+
+根据以上分类，以及jdk的说明，我们可以画出更详细的类结构图，如下：![img](https://mmbiz.qpic.cn/mmbiz_jpg/hvUCbRic69sDYrnicZ2Ykczp7I69GbFp2XQSkfRcsDn6rG3m1O8WNUA3ezliabByVZoQXQIAepXKRPShIUcgib5YbQ/640?wx_fmt=jpeg&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+
+#### 分类说明：
+
+**1. 输入字节流InputStream**：
+
+- **ByteArrayInputStream、StringBufferInputStream、FileInputStream** 是三种基本的介质流，它们分别从Byte 数组、StringBuffer、和本地文件中读取数据。
+- **PipedInputStream** 是从与其它线程共用的管道中读取数据。PipedInputStream的一个实例要和PipedOutputStream的一个实例共同使用，共同完成管道的读取写入操作。主要用于线程操作。
+- **DataInputStream**： 将基础数据类型读取出来
+- **ObjectInputStream** 和所有 **FilterInputStream** 的子类都是装饰流（装饰器模式的主角）。
+
+**2.输出字节流OutputStream：**
+
+- **ByteArrayOutputStream**、**FileOutputStream**： 是两种基本的介质流，它们分别向- Byte 数组、和本地文件中写入数据。
+- **PipedOutputStream** 是向与其它线程共用的管道中写入数据。
+- **DataOutputStream** 将基础数据类型写入到文件中
+- **ObjectOutputStream** 和所有 **FilterOutputStream** 的子类都是装饰流。
+
+**节流的输入和输出类结构图：**
+
+![img](https://mmbiz.qpic.cn/mmbiz_jpg/hvUCbRic69sDYrnicZ2Ykczp7I69GbFp2XUacOvJ9pQtTnXe9snLkv5npIGZnhphFRW0MNedet3xwxA24cWga8gw/640?wx_fmt=jpeg&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+
+**3.字符输入流Reader：：**
+
+- **FileReader、CharReader、StringReader** 是三种基本的介质流，它们分在本地文件、Char 数组、String中读取数据。
+- **PipedReader**：是从与其它线程共用的管道中读取数据
+- **BufferedReader** ：加缓冲功能，避免频繁读写硬盘
+- **InputStreamReader**： 是一个连接字节流和字符流的桥梁，它将字节流转变为字符流。
+
+**4.字符输出流Writer：**
+
+- **StringWriter**:向String 中写入数据。
+- **CharArrayWriter**：实现一个可用作字符输入流的字符缓冲区
+- **PipedWriter**:是向与其它线程共用的管道中写入数据
+- **BufferedWriter** ： 增加缓冲功能，避免频繁读写硬盘。
+- **PrintWriter** 和**PrintStream** 将对象的格式表示打印到文本输出流。 极其类似，功能和使用也非常相似
+- **OutputStreamWriter**： 是OutputStream 到Writer 转换的桥梁，它的子类FileWriter 其实就是一个实现此功能的具体类（具体可以研究一SourceCode）。功能和使用和OutputStream 极其类似，后面会有它们的对应图。
+
+**字符流的输入和输出类结构图：**
+
+![img](https://mmbiz.qpic.cn/mmbiz_jpg/hvUCbRic69sDYrnicZ2Ykczp7I69GbFp2XbvPniczIeTaicxVLrlxCicMaltvmLAhzib9Y8cmrc6231Ya0UXoCIiboxPA/640?wx_fmt=jpeg&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+
+
+
+#### 分类二：按操作对象
+
+![img](https://mmbiz.qpic.cn/mmbiz_jpg/hvUCbRic69sDYrnicZ2Ykczp7I69GbFp2XQ5ksY6s9OU4q5aIyWELJxiaqkicBmrqqRMMuQ2aZlPE5Bib8CntCliceFA/640?wx_fmt=jpeg&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+
+#### 分类说明：
+
+**对文件进行操作（节点流）：**
+
+- FileInputStream（字节输入流），
+- FileOutputStream（字节输出流），
+- FileReader（字符输入流），
+- FileWriter（字符输出流）
+
+**对管道进行操作（节点流）：**
+
+- PipedInputStream（字节输入流）,
+- PipedOutStream（字节输出流），
+- PipedReader（字符输入流），
+- PipedWriter（字符输出流）。
+- PipedInputStream的一个实例要和PipedOutputStream的一个实例共同使用，共同完成管道的读取写入操作。主要用于线程操作。
+
+**字节/字符数组流（节点流）：**
+
+- ByteArrayInputStream，
+- ByteArrayOutputStream，
+- CharArrayReader，
+- CharArrayWriter；
+
+**除了上述三种是节点流，其他都是处理流，需要跟节点流配合使用。**
+
+**Buffered缓冲流（处理流）：**带缓冲区的处理流，缓冲区的作用的主要目的是：避免每次和硬盘打交道，提高数据访问的效率。
+
+- BufferedInputStream，
+- BufferedOutputStream，
+- BufferedReader,
+- BufferedWriter,
+
+**转化流（处理流）：**
+
+- InputStreamReader：把字节转化成字符；
+- OutputStreamWriter：把字节转化成字符。
+
+**基本类型数据流（处理流）：用于操作基本数据类型值。**
+
+因为平时若是我们输出一个8个字节的long类型或4个字节的float类型，那怎么办呢？可以一个字节一个字节输出，也可以把转换成字符串输出，但是这样转换费时间，若是直接输出该多好啊，因此这个数据流就解决了我们输出数据类型的困难。数据流可以直接输出float类型或long类型，提高了数据读写的效率。
+
+- DataInputStream，
+- DataOutputStream。
+
+**打印流（处理流）：**
+
+一般是打印到控制台，可以进行控制打印的地方。
+
+- PrintStream，
+- PrintWriter，
+
+**对象流（处理流）：**
+
+把封装的对象直接输出，而不是一个个在转换成字符串再输出。
+
+- ObjectInputStream，对象反序列化；
+- ObjectOutputStream，对象序列化；
+
+**合并流（处理流）：**
+
+- SequenceInputStream：可以认为是一个工具类，将两个或者多个输入流当成一个输入流依次读取。
+
+#### 其他类：File（已经被Java7的Path取代）
+
+File类是对文件系统中文件以及文件夹进行封装的对象，可以通过对象的思想来操作文件和文件夹。 File类保存文件或目录的各种元数据信息，包括文件名、文件长度、最后修改时间、是否可读、获取当前文件的路径名，判断指定文件是否存在、获得当前目录中的文件列表，创建、删除文件和目录等方法。
+
+#### 其他类：RandomAccessFile
+
+该对象并不是流体系中的一员，其封装了字节流，同时还封装了一个缓冲区（字符数组），通过内部的指针来操作字符数组中的数据。 该对象特点：
+
+1. 该对象只能操作文件，所以构造函数接收两种类型的参数：a.字符串文件路径；b.File对象。
+2. 该对象既可以对文件进行读操作，也能进行写操作，在进行对象实例化时可指定操作模式(r,rw)。
+
+**注意：** IO中的很多内容都可以使用NIO完成，这些知识点大家知道就好，使用的话还是尽量使用NIO/AIO。
+
+
+
+### I/O面试总结
+
+#### **1. 什么是IO流？**
+
+它是一种数据的流从源头流到目的地。比如文件拷贝，输入流和输出流都包括了。输入流从文件中读取数据存储到进程(process)中，输出流从进程中读取数据然后写入到目标文件。
+
+#### **2.字节流和字符流的区别。**
+
+字节流在JDK1.0中就被引进了，用于操作包含ASCII字符的文件。JAVA也支持其他的字符如Unicode，为了读取包含Unicode字符的文件，JAVA语言设计者在JDK1.1中引入了字符流。ASCII作为Unicode的子集，对于英语字符的文件，可以使用字节流也可以使用字符流。
+
+#### **3.Java中流类的超类主要由那些？**
+
+- java.io.InputStream
+- java.io.OutputStream
+- java.io.Reader
+- java.io.Writer
+
+#### **4. FileInputStream和FileOutputStream是什么？**
+
+
+这是在拷贝文件操作的时候，经常用到的两个类。在处理小文件的时候，它们性能表现还不错，在大文件的时候，最好使用BufferedInputStream (或 BufferedReader) 和 BufferedOutputStream (或 BufferedWriter)
+
+#### **5. 字节流和字符流，你更喜欢使用拿一个？**
+
+个人来说，更喜欢使用字符流，因为他们更新一些。许多在字符流中存在的特性，字节流中不存在。比如使用BufferedReader而不是BufferedInputStreams或DataInputStream，使用newLine()方法来读取下一行，但是在字节流中我们需要做额外的操作。
+
+字节流和字符流的用法几乎完成全一样，区别在于字节流和字符流所操作的数据单元不同，字节流操作的单元是数据单元是8位的字节，字符流操作的是数据单元为16位的字符。
+
+#### **6.System.out.println()是什么？**
+
+`println`是PrintStream的一个方法。`out`是一个静态PrintStream类型的成员变量，`System`是一个java.lang包中的类，用于和底层的操作系统进行交互。
+
+#### **7.什么是Filter流？**
+
+
+Filter Stream是一种IO流主要作用是用来对存在的流增加一些额外的功能，像给目标文件增加源文件中不存在的行数，或者增加拷贝的性能。
+
+#### **8. 有哪些可用的Filter流？**
+
+在java.io包中主要由4个可用的filter Stream。两个字节filter stream，两个字符filter stream. 分别是FilterInputStream, FilterOutputStream, FilterReader and FilterWriter.这些类是抽象类，不能被实例化的。
+
+​       **有哪些Filter流的子类:**
+
+- LineNumberInputStream 给目标文件增加行号
+- DataInputStream 有些特殊的方法如`readInt()`, `readDouble()`和`readLine()` 等可以读取一个 int, double和一个string一次性的,
+- BufferedInputStream 增加性能
+- PushbackInputStream 推送要求的字节到系统中
+
+#### **9.SequenceInputStream的作用？**
+
+这个类的作用是将多个输入流合并成一个输入流，通过SequenceInputStream类包装后形成新的一个总的输入流。在拷贝多个文件到一个目标文件的时候是非常有用的。可用使用很少的代码实现
+
+#### **10.说说PrintStream和PrintWriter**
+
+
+他们两个的功能相同，但是属于不同的分类。字节流和字符流。他们都有println()方法。
+
+#### **11. 在文件拷贝的时候，那一种流可用提升更多的性能？**
+
+在字节流的时候，使用BufferedInputStream和BufferedOutputStream。
+在字符流的时候，使用BufferedReader 和 BufferedWriter
+
+#### **12 .说说管道流(Piped Stream)**
+
+
+有四种管道流， PipedInputStream, PipedOutputStream, PipedReader 和 PipedWriter.在多个线程或进程中传递数据的时候管道流非常有用。
+
+#### **13.说说File类**
+
+它不属于 IO流，也不是用于文件操作的，它主要用于知道一个文件的属性，读写权限，大小等信息。注意：Java7中文件IO发生了很大的变化，专门引入了很多新的类来取代原来的基于java.io.File的文件IO操作方式。详情阅读下面的文章：
+
+#### **14. 说说RandomAccessFile?**
+
+
+它在java.io包中是一个特殊的类，既不是输入流也不是输出流，它两者都可以做到。他是Object的直接子类。通常来说，一个流只有一个功能，要么读，要么写。但是RandomAccessFile既可以读文件，也可以写文件。 DataInputStream 和 DataOutStream有的方法，在RandomAccessFile中都存在。
+
+
+
+### NIO相比较IO的新特性
+
+总的来说java 中的IO 和NIO的区别主要有3点：
+
+IO是面向流的，NIO是面向缓冲的；
+IO是阻塞的，NIO是非阻塞的；
+IO是单线程的，NIO 是通过选择器来模拟多线程的；
+NIO在基础的IO流上发展处新的特点，分别是：内存映射技术，字符及编码，非阻塞I/O和文件锁定。下面我们分别就这些技术做一些说明。
+
+#### 1.内存映射
+
+这个功能主要是为了提高大文件的读写速度而设计的。内存映射文件(memory-mappedfile)能让你创建和修改那些大到无法读入内存的文件。有了内存映射文件，你就可以认为文件已经全部读进了内存，然后把它当成一个非常大的数组来访问了。将文件的一段区域映射到内存中，比传统的文件处理速度要快很多。内存映射文件它虽然最终也是要从磁盘读取数据，但是它并不需要将数据读取到OS内核缓冲区，而是直接将进程的用户私有地址空间中的一部分区域与文件对象建立起映射关系，就好像直接从内存中读、写文件一样，速度当然快了。
+
+**NIO中内存映射主要用到以下两个类：**
+
+- java.nio.MappedByteBuffer
+- java.nio.channels.FileChannel
+
+```java
+public class MemMapReadWrite {
+	private static int len;
+
+	/**
+	 * 读文件
+	 *
+	 * @param fileName
+	 * @return
+	 */
+	public static ByteBuffer readFile(String fileName) {
+   	 try {
+   	     	RandomAccessFile file = new RandomAccessFile(fileName, "rw");
+    	    len = (int) file.length();
+    	    FileChannel channel = file.getChannel();
+        	MappedByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, len);
+
+        	return buffer.get(new byte[(int) file.length()]);
+   	 	} catch (Exception e) {
+        e.printStackTrace();
+    	}
+    	return null;
+	}
+
+/**
+ * 写文件
+ *
+ * @param readFileName
+ * @param writeFileName
+ */
+public static void writeFile(String readFileName, String writeFileName) {
+    try {
+        RandomAccessFile file = new RandomAccessFile(writeFileName, "rw");
+        FileChannel channel = file.getChannel();
+        ByteBuffer buffer = readFile(readFileName);
+
+        MappedByteBuffer bytebuffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, len);
+        long startTime = System.currentTimeMillis();
+        for (int i = 0; i < len; i++) {
+            bytebuffer.put(i, buffer.get(i));
+        }
+        bytebuffer.flip();
+        long endTime = System.currentTimeMillis();
+        System.out.println("写文件耗时： " + (endTime - startTime));
+       
+       } catch (Exception e) {
+        e.printStackTrace();
+    }
+}
+
+	public static void main(String[] args) {
+   	 	String readFileName = "c://1.pdf";
+    	String writeFileName = "c://2.pdf";
+
+    	writeFile(readFileName, writeFileName);
+	}
+}
+```
+
+效果对比还是挺明显的。我们看到在上面程序中调用FileChannel类的map方法进行内存映射，第一个参数设置映射模式,现在支持3种模式：
+
+**1.FileChannel.MapMode.READ_ONLY**：只读缓冲区，在缓冲区中如果发生写操作则会产生ReadOnlyBufferException；
+
+**2.FileChannel.MapMode.READ_WRITE**：读写缓冲区，任何时刻如果通过内存映射的方式修改了文件则立刻会对磁盘上的文件执行相应的修改操作。别的进程如果也共享了同一个映射，则也会同步看到变化。而不是像标准IO那样每个进程有各自的内核缓冲区，比如JAVA代码中，没有执行 IO输出流的 flush() 或者 close() 操作，那么对文件的修改不会更新到磁盘去，除非进程运行结束；
+
+**3.FileChannel.MapMode.PRIVATE** ：这个比较狠，可写缓冲区，但任何修改是缓冲区私有的，不会回到文件中。所以尽情的修改吧，结局跟突然停电是一样的。
+
+我们注意到FileChannel类中有map方法来建立内存映射，按理说是否应用的有相应的unmap方法来卸载映射内存呢。但是竟然没有找到该方法。一旦建立映射保持有效，直到MappedByteBuffer对象被垃圾收集。 此外，映射缓冲区不会绑定到创建它们的通道。 关闭相关的FileChannel不会破坏映射; 只有缓冲对象本身的处理打破了映射。
+
+**内存映射文件的优点：**
+
+用户进程将文件数据视为内存，因此不需要发出read()或write()系统调用。
+当用户进程触摸映射的内存空间时，将自动生成页面错误，以从磁盘引入文件数据。 如果用户修改映射的内存空间，受影响的页面将自动标记为脏，并随后刷新到磁盘以更新文件。
+操作系统的虚拟内存子系统将执行页面的智能缓存，根据系统负载自动管理内存。
+数据始终是页面对齐的，不需要缓冲区复制。
+可以映射非常大的文件，而不消耗大量内存来复制数据。  
+
+
+
+#### 2.字符编码
+
+说到字符和编码，我们先说一个概念，字符编码方案：
+
+编码方案定义了如何把字符编码的序列表达为字节序列。字符编码的数值不需要与编码字节相同，也不需要是一对一或一对多个的关系。原则上，把字符集编码和解码近似视为对象的序列化和反序列化。
+
+通常字符数据编码是用于网络传输或文件存储。编码方案不是字符集，它是映射；但是因为它们之间的紧密联系，大部分编码都与一个独立的字符集相关联。例如，UTF-8，仅用来编码Unicode字符集。尽管如此，用一个编码方案处理多个字符集还是可能发生的。例如，EUC可以对几个亚洲语言的字符进行编码。
+
+目前字符编码方案有US-ASCII,UTF-8,GB2312, BIG5,GBK,GB18030,UTF-16BE, UTF-16LE, UTF-16,UNICODE。其中Unicode试图把全世界所有语言的字符集统一到全面的映射之中。虽然占有一定的市场份额，但是目前其余的字符方案仍然广被采用。大部分的操作系统在I/O与文件存储方面仍是以字节为导向的，所以无论使用何种编码，Unicode或其他编码，在字节序列和字符集编码之间仍需要进行转化。
+
+由java.nio.charset包组成的类满足了这个需求。这不是Java平台第一次处理字符集编码，但是它是最系统、最全面、以及最灵活的解决方式。
+
+```java
+public class CharsetTest {
+    public static void main(String[] args) {
+        Scanner input = new Scanner(System.in);
+        String str = input.next();
+        String[] charsetNames = {"US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE",
+                "UTF-16LE", "UTF-16"
+        };
+
+        for (int i = 0; i < charsetNames.length; i++) {
+            doEncode(Charset.forName(charsetNames[i]), str);
+        }
+    }
+
+    private static void doEncode(Charset cs, String input) {
+        ByteBuffer bb = cs.encode(input);
+        System.out.println("Charset: " + cs.name());
+        System.out.println(" Input: " + input);
+        System.out.println("Encoded: ");
+        for (int i = 0; bb.hasRemaining(); i++) {
+            int b = bb.get();
+            int ival = ((int) b) & 0xff;
+            char c = (char) ival;
+            // Keep tabular alignment pretty
+            if (i < 10) System.out.print(" ");
+            // 打印索引序列
+            System.out.print(" " + i + ": ");
+            // Better formatted output is coming someday...
+            if (ival < 16)
+                System.out.print("0");
+            // 输出该字节位值的16进制形式
+            System.out.print(Integer.toHexString(ival));
+            // 打印出刚才我们输入的字符，如果是空格或者标准字符集中没有包含
+            //该字符输出空格，否则输出该字符
+            if (Character.isWhitespace(c) || Character.isISOControl(c)) {
+                System.out.println("");
+            } else {
+                System.out.println(" (" + c + ")");
+            }
+        }
+        System.out.println("");
+    }
+
+}
+```
+
+输出结果：
+
+```java
+abc
+Charset: US-ASCII
+ Input: abc
+Encoded: 
+  0: 61 (a)
+  1: 62 (b)
+  2: 63 (c)
+
+Charset: ISO-8859-1
+ Input: abc
+Encoded: 
+  0: 61 (a)
+  1: 62 (b)
+  2: 63 (c)
+
+Charset: UTF-8
+ Input: abc
+Encoded: 
+  0: 61 (a)
+  1: 62 (b)
+  2: 63 (c)
+
+Charset: UTF-16BE
+ Input: abc
+Encoded: 
+  0: 00
+  1: 61 (a)
+  2: 00
+  3: 62 (b)
+  4: 00
+  5: 63 (c)
+
+Charset: UTF-16LE
+ Input: abc
+Encoded: 
+  0: 61 (a)
+  1: 00
+  2: 62 (b)
+  3: 00
+  4: 63 (c)
+  5: 00
+
+Charset: UTF-16
+ Input: abc
+Encoded: 
+  0: fe (þ)
+  1: ff (ÿ)
+  2: 00
+  3: 61 (a)
+  4: 00
+  5: 62 (b)
+  6: 00
+  7: 63 (c)
+
+Process finished with exit code 0
+```
+
+字符的编码和解码是使用很频繁的，试想如果使用UTF-8字符集进行编码，但是却是用UTF-16字符集进行解码，那么这条信息对于用户来说其实是无用的。因为没人能看得懂。**在NIO中提供了两个类CharsetEncoder和CharsetDecoder来实现编码转换方案。**
+
+CharsetEncoder类是一个状态编码引擎。实际上，编码器有状态意味着它们不是线程安全的：CharsetEncoder对象不应该在线程中共享。CharsetEncoder对象是一个状态转换引擎：字符进去，字节出来。一些编码器的调用可能需要完成转换。编码器存储在调用之间转换的状态。
+
+字符集解码器是编码器的逆转。通过特殊的编码方案把字节编码转化成16-位Unicode字符的序列。与CharsetEncoder类似的, CharsetDecoder也是状态转换引擎。
+
+#### 3.非阻塞IO
+
+一般来说 I/O 模型可以分为：同步阻塞，同步非阻塞，异步阻塞，异步非阻塞 四种IO模型。
+
+**同步阻塞 IO:**
+
+在此种方式下，用户进程在发起一个 IO 操作以后，必须等待 IO 操作的完成，只有当真正完成了 IO 操作以后，用户进程才能运行。 JAVA传统的 IO 模型属于此种方式！
+
+**同步非阻塞 IO:**
+
+在此种方式下，用户进程发起一个 IO 操作以后可以返回做其它事情，但是用户进程需要时不时的询问 IO 操作是否就绪，这就要求用户进程不停的去询问，从而引入不必要的 CPU 资源浪费。其中目前 JAVA 的 NIO 就属于同步非阻塞 IO 。
+
+**异步阻塞 IO:**
+
+此种方式下是指应用发起一个 IO 操作以后，不等待内核 IO 操作的完成，等内核完成 IO 操作以后会通知应用程序，这其实就是同步和异步最关键的区别，同步必须等待或者主动的去询问 IO 是否完成，那么为什么说是阻塞的呢？因为此时是通过 select 系统调用来完成的，而 select 函数本身的实现方式是阻塞的，而采用 select 函数有个好处就是它可以同时监听多个文件句柄，从而提高系统的并发性！
+
+**异步非阻塞 IO:**
+
+在此种模式下，用户进程只需要发起一个 IO 操作然后立即返回，等 IO 操作真正的完成以后，应用程序会得到 IO 操作完成的通知，此时用户进程只需要对数据进行处理就好了，不需要进行实际的 IO 读写操作，因为 真正的 IO读取或者写入操作已经由 内核完成了。目前 Java 中还没有支持此种 IO 模型。
+
+**上面我们说到nio是使用了同步非阻塞模型。我们知道典型的非阻塞IO模型一般如下：**
+
+```java 
+while(true){
+    data = socket.read();
+    if(data!= error){
+        处理数据
+        break;
+    }
+}
+```
+
+但是对于非阻塞IO就有一个非常严重的问题，在while循环中需要不断地去询问内核数据是否就绪，这样会导致CPU占用率非常高，因此一般情况下很少使用while循环这种方式来读取数据。所以这就不得不说到下面这个概念–多路复用IO模型。
+
+**多路复用IO模型**
+
+在多路复用IO模型中，会有一个线程不断去轮询多个socket的状态，只有当socket真正有读写事件时，才真正调用实际的IO读写操作。因为在多路复用IO模型中，只需要使用一个线程就可以管理多个socket，系统不需要建立新的进程或者线程，也不必维护这些线程和进程，并且只有在真正有socket读写事件进行时，才会使用IO资源，所以它大大减少了资源占用。
+
+NIO 的非阻塞 I/O 机制是围绕 选择器和 通道构建的。 Channel 类表示服务器和客户机之间的一种通信机制。Selector 类是 Channel 的多路复用器。 Selector 类将传入客户机请求多路分用并将它们分派到各自的请求处理程序。NIO 设计背后的基石是反应器(Reactor)设计模式。
+
+Reactor负责IO事件的响应，一旦有事件发生，便广播发送给相应的handler去处理。而NIO的设计则是完全按照Reactor模式来设计的。Selector发现某个channel有数据时，会通过SelectorKey来告知，然后实现事件和handler的绑定。
+
+#### **反应器(Reactor)设计模式**
+
+##### 1.单线程Reactor模型
+
+如下图所示：
+
+[![wpsC334.tmp](https://img2018.cnblogs.com/blog/1485398/201810/1485398-20181022232217633-124484857.jpg)](https://img2018.cnblogs.com/blog/1485398/201810/1485398-20181022232216603-150952598.jpg)
+
+这是最简单的单Reactor单线程模型。Reactor线程是个多面手，负责多路分离套接字，Accept新连接，并分派请求到Handler处理器中。
+
+下面的图，来自于“Scalable IO in Java”，和上面的图的意思，差不多。Reactor和Hander 处于一条线程执行。
+
+[![wpsC345.tmp](https://img2018.cnblogs.com/blog/1485398/201810/1485398-20181022232218623-1679192697.jpg)](https://img2018.cnblogs.com/blog/1485398/201810/1485398-20181022232218232-38017378.jpg)
+
+顺便说一下，可以将上图的accepter，看做是一种特殊的handler。
+
+**单线程Reactor的参考代码**
+
+```Java
+public class Reactor implements Runnable {
+    final Selector selector;
+    final ServerSocketChannel serverSocket;
+
+    Reactor(int port) throws IOException { //Reactor初始化
+        selector = Selector.open();
+        serverSocket = ServerSocketChannel.open();
+        serverSocket.socket().bind(new InetSocketAddress(port));
+        //非阻塞
+        serverSocket.configureBlocking(false);
+
+        //分步处理,第一步,接收accept事件
+        SelectionKey sk =
+                serverSocket.register(selector, SelectionKey.OP_ACCEPT);
+        //attach callback object, Acceptor
+        sk.attach(new Acceptor());
+    }
+
+    public void run() {
+        try {
+            while (!Thread.interrupted()) {
+                selector.select();
+                Set selected = selector.selectedKeys();
+                Iterator it = selected.iterator();
+                while (it.hasNext()) {
+                    //Reactor负责dispatch收到的事件
+                    dispatch((SelectionKey) (it.next()));
+                }
+                selected.clear();
+            }
+        } catch (IOException ex) { /* ... */ }
+    }
+
+    void dispatch(SelectionKey k) {
+        Runnable r = (Runnable) (k.attachment());
+        //调用之前注册的callback对象
+        if (r != null) {
+            r.run();
+        }
+    }
+
+    // inner class
+    class Acceptor implements Runnable {
+        public void run() {
+            try {
+                SocketChannel channel = serverSocket.accept();
+                if (channel != null)
+                    new Handler(selector, channel);
+            } catch (IOException ex) { /* ... */ }
+        }
+    }
+}
+
+
+```
+
+**单线程handler代码如下：**
+
+```java
+class Handler implements Runnable {
+    final SocketChannel channel;
+    final SelectionKey sk;
+    ByteBuffer input = ByteBuffer.allocate(SystemConfig.INPUT_SIZE);
+    ByteBuffer output = ByteBuffer.allocate(SystemConfig.SEND_SIZE);
+    static final int READING = 0, SENDING = 1;
+    int state = READING;
+
+    Handler(Selector selector, SocketChannel c) throws IOException {
+        channel = c;
+        c.configureBlocking(false);
+        // Optionally try first read now
+        sk = channel.register(selector, 0);
+
+        //将Handler作为callback对象
+        sk.attach(this);
+
+        //第二步,注册Read就绪事件
+        sk.interestOps(SelectionKey.OP_READ);
+        selector.wakeup();
+    }
+
+    boolean inputIsComplete() {
+        /* ... */
+        return false;
+    }
+
+    boolean outputIsComplete() {
+
+        /* ... */
+        return false;
+    }
+
+    void process() {
+        /* ... */
+        return;
+    }
+
+    public void run() {
+        try {
+            if (state == READING) {
+                read();
+            } else if (state == SENDING) {
+                send();
+            }
+        } catch (IOException ex) { /* ... */ }
+    }
+
+    void read() throws IOException {
+        channel.read(input);
+        if (inputIsComplete()) {
+
+            process();
+
+            state = SENDING;
+            // Normally also do first write now
+
+            //第三步,接收write就绪事件
+            sk.interestOps(SelectionKey.OP_WRITE);
+        }
+    }
+
+    void send() throws IOException {
+        channel.write(output);
+
+        //write完就结束了, 关闭select key
+        if (outputIsComplete()) {
+            sk.cancel();
+        }
+    }
+}
+```
+
+**单线程模式的缺点:**
+
+1、 当其中某个 handler 阻塞时， 会导致其他所有的 client 的 handler 都得不到执行， 并且更严重的是， handler 的阻塞也会导致整个服务不能接收新的 client 请求(因为 acceptor 也被阻塞了)。 因为有这么多的缺陷， 因此单线程Reactor 模型用的比较少。这种单线程模型不能充分利用多核资源，所以实际使用的不多。
+
+2、因此，单线程模型仅仅适用于handler 中业务处理组件能快速完成的场景。
+
+
+
+##### 2.多线程reactor模型
+
+在线程Reactor模式基础上，做如下改进：
+
+（1）将Handler处理器的执行放入线程池，多线程进行业务处理。
+
+（2）而对于Reactor而言，可以仍为单个线程。如果服务器为多核的CPU，为充分利用系统资源，可以将Reactor拆分为两个线程。
+
+一个简单的图如下：
+
+[![image](https://img2018.cnblogs.com/blog/1485398/201810/1485398-20181022232219420-1734756772.png)](https://img2018.cnblogs.com/blog/1485398/201810/1485398-20181022232218986-2112881889.png)
+
+###### 2.1 **改进后的完整示意图**
+
+下面的图，来自于“Scalable IO in Java”，和上面的图的意思，差不多，只是更加详细。Reactor是一条独立的线程，Hander 处于线程池中执行。
+
+[![wpsC376.tmp](https://img2018.cnblogs.com/blog/1485398/201810/1485398-20181022232220631-1867817712.jpg)](https://img2018.cnblogs.com/blog/1485398/201810/1485398-20181022232219752-1587566311.jpg)
+
+######  2.2 代码示例
+
+```Java
+package com.crazymakercircle.ReactorModel;
+import com.crazymakercircle.config.SystemConfig;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.SocketChannel;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+class MthreadHandler implements Runnable
+{
+    final SocketChannel channel;
+    final SelectionKey selectionKey;
+    ByteBuffer input = ByteBuffer.allocate(SystemConfig.INPUT_SIZE);
+    ByteBuffer output = ByteBuffer.allocate(SystemConfig.SEND_SIZE);
+    static final int READING = 0, SENDING = 1;
+    int state = READING;
+
+
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    static final int PROCESSING = 3;
+
+    MthreadHandler(Selector selector, SocketChannel c) throws IOException
+    {
+        channel = c;
+        c.configureBlocking(false);
+        // Optionally try first read now
+        selectionKey = channel.register(selector, 0);
+
+        //将Handler作为callback对象
+        selectionKey.attach(this);
+
+        //第二步,注册Read就绪事件
+        selectionKey.interestOps(SelectionKey.OP_READ);
+        selector.wakeup();
+    }
+
+    boolean inputIsComplete()
+    {
+       /* ... */
+        return false;
+    }
+
+    boolean outputIsComplete()
+    {
+
+       /* ... */
+        return false;
+    }
+
+    void process()
+    {
+       /* ... */
+        return;
+    }
+
+    public void run()
+    {
+        try
+        {
+            if (state == READING)
+            {
+                read();
+            }
+            else if (state == SENDING)
+            {
+                send();
+            }
+        } catch (IOException ex)
+        { /* ... */ }
+    }
+
+
+    synchronized void read() throws IOException
+    {
+        // ...
+        channel.read(input);
+        if (inputIsComplete())
+        {
+            state = PROCESSING;
+            //使用线程pool异步执行
+            pool.execute(new Processer());
+        }
+    }
+
+    void send() throws IOException
+    {
+        channel.write(output);
+
+        //write完就结束了, 关闭select key
+        if (outputIsComplete())
+        {
+            selectionKey.cancel();
+        }
+    }
+
+    synchronized void processAndHandOff()
+    {
+        process();
+        state = SENDING;
+        // or rebind attachment
+        //process完,开始等待write就绪
+        selectionKey.interestOps(SelectionKey.OP_WRITE);
+    }
+
+    class Processer implements Runnable
+    {
+        public void run()
+        {
+            processAndHandOff();
+        }
+    }
+
+}
+```
+
+###### 2.3 reactor持续改进
+
+对于多个CPU的机器，为充分利用系统资源，将Reactor拆分为两部分。代码如下
+
+```Java
+package com.crazymakercircle.ReactorModel;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.util.Iterator;
+import java.util.Set;
+
+class MthreadReactor implements Runnable
+{
+
+    //subReactors集合, 一个selector代表一个subReactor
+    Selector[] selectors=new Selector[2];
+    int next = 0;
+    final ServerSocketChannel serverSocket;
+
+    MthreadReactor(int port) throws IOException
+    { //Reactor初始化
+        selectors[0]=Selector.open();
+        selectors[1]= Selector.open();
+        serverSocket = ServerSocketChannel.open();
+        serverSocket.socket().bind(new InetSocketAddress(port));
+        //非阻塞
+        serverSocket.configureBlocking(false);
+
+
+        //分步处理,第一步,接收accept事件
+        SelectionKey sk =
+                serverSocket.register( selectors[0], SelectionKey.OP_ACCEPT);
+        //attach callback object, Acceptor
+        sk.attach(new Acceptor());
+    }
+
+    public void run()
+    {
+        try
+        {
+            while (!Thread.interrupted())
+            {
+                for (int i = 0; i <2 ; i++)
+                {
+                    selectors[i].select();
+                    Set selected =  selectors[i].selectedKeys();
+                    Iterator it = selected.iterator();
+                    while (it.hasNext())
+                    {
+                        //Reactor负责dispatch收到的事件
+                        dispatch((SelectionKey) (it.next()));
+                    }
+                    selected.clear();
+                }
+
+            }
+        } catch (IOException ex)
+        { /* ... */ }
+    }
+
+    void dispatch(SelectionKey k)
+    {
+        Runnable r = (Runnable) (k.attachment());
+        //调用之前注册的callback对象
+        if (r != null)
+        {
+            r.run();
+        }
+    }
+
+
+    class Acceptor { // ...
+        public synchronized void run() throws IOException
+        {
+            SocketChannel connection =
+                    serverSocket.accept(); //主selector负责accept
+            if (connection != null)
+            {
+                new Handler(selectors[next], connection); //选个subReactor去负责接收到的connection
+            }
+            if (++next == selectors.length) next = 0;
+        }
+    }
+}
+```
+
+
+
+##### **3.Reactor编程的优点和缺点**
+
+###### 3.1 **优点**
+
+1. 响应快，不必为单个同步时间所阻塞，虽然Reactor本身依然是同步的
+2. 编程相对简单，可以最大程度的避免复杂的多线程及同步问题，并且避免了多线程/进程的切换开销
+3. 可扩展性，可以方便的通过增加Reactor实例个数来充分利用CPU资源
+4. 可复用性，reactor框架本身与具体事件处理逻辑无关，具有很高的复用性
+
+###### 3.2 **缺点**
+
+1. 相比传统的简单模型，Reactor增加了一定的复杂性，因而有一定的门槛，并且不易于调试
+2. Reactor模式需要底层的Synchronous Event Demultiplexer支持，比如Java中的Selector支持，操作系统的select系统调用支持，如果要自己实现Synchronous Event Demultiplexer可能不会有那么高效
+3. Reactor模式在IO读写数据时还是在同一个线程中实现的，即使使用多个Reactor机制的情况下，那些共享一个Reactor的Channel如果出现一个长时间的数据读写，会影响这个Reactor中其他Channel的相应时间，比如在大文件传输时，IO操作就会影响其他Client的相应时间，因而对这种操作，使用传统的Thread-Per-Connection或许是一个更好的选择，或则此时使用改进版的Reactor模式如Proactor模式
+
+
+
+## Java 8
+
+### Java 8 Tutorial
+
+#### 1.接口的默认方法(Default Methods for Interfaces)
+
+**Java 8使我们能够通过使用 `default` 关键字向接口添加非抽象方法实现。 此功能也称为[虚拟扩展方法](http://stackoverflow.com/a/24102730)。**
+
+第一个例子：
+
+```Java
+interface Formula{
+    double calculate(int a);
+    
+    default double sqrt(int a) {
+        return Math.sqrt(a);
+    }
+}
+```
+
+Formula 接口中除了抽象方法计算接口公式还定义了默认方法 `sqrt`。 实现该接口的类只需要实现抽象方法 `calculate`。 默认方法`sqrt` 可以直接使用。当然你也可以直接通过接口创建对象，然后实现接口中的默认方法就可以了，我们通过代码演示一下这种方式。
+
+```Java
+public class Main {
+
+  public static void main(String[] args) {
+    // TODO 通过匿名内部类方式访问接口
+    Formula formula = new Formula() {
+        @Override
+        public double calculate(int a) {
+            return sqrt(a * 100);
+        }
+    };
+    System.out.println(formula.calculate(100));     // 100.0
+    System.out.println(formula.sqrt(16));           // 4.0
+  }
+
+}
+```
+
+formula 是作为匿名对象实现的。该代码非常容易理解，6行代码实现了计算 `sqrt(a * 100)`。在下一节中，我们将会看到在 Java 8 中实现单个方法对象有一种更好更方便的方法。
+
+**译者注：** 不管是抽象类还是接口，都可以通过匿名内部类的方式访问。不能通过抽象类或者接口直接创建对象。对于上面通过匿名内部类方式访问接口，我们可以这样理解：一个内部类实现了接口里的抽象方法并且返回一个内部类对象，之后我们让接口的引用来指向这个对象。
+
+#### 2.Lambda表达式(Lambda expressions)
+
+首先看看在老版本的Java中是如何排列字符串的：
+
+```java 
+List<String> names = Arrays.asList("peter", "anna", "mike", "xenia");
+
+Collections.sort(names, new Comparator<String>() {
+    @Override
+    public int compare(String a, String b) {
+        return b.compareTo(a);
+    }
+});
+```
+
+只需要给静态方法` Collections.sort` 传入一个 List 对象以及一个比较器来按指定顺序排列。通常做法都是创建一个匿名的比较器对象然后将其传递给 `sort` 方法。
+
+在Java 8 中你就没必要使用这种传统的匿名对象的方式了，Java 8提供了更简洁的语法，lambda表达式：
+
+```java 
+Collections.sort(names, (String a, String b) -> {
+    return b.compareTo(a);
+});
+```
+
+可以看出，代码变得更段且更具有可读性，但是实际上还可以写得更短：
+
+```java
+Collections.sort(names, (String a, String b) -> b.compareTo(a));
+```
+
+对于函数体只有一行代码的，你可以去掉大括号{}以及return关键字，但是你还可以写得更短点：
+
+```java
+names.sort((a, b) -> b.compareTo(a));
+```
+
+List 类本身就有一个 `sort` 方法。并且Java编译器可以自动推导出参数类型，所以你可以不用再写一次类型。接下来我们看看lambda表达式还有什么其他用法。
+
+##### 2.1 函数式接口(Functional Interfaces)
+
+**"函数式接口"是指仅仅只包含一个抽象方法,但是可以有多个非抽象方法(也就是上面提到的默认方法)的接口。** 像这样的接口，可以被隐式转换为lambda表达式。`java.lang.Runnable` 与 `java.util.concurrent.Callable` 是函数式接口最典型的两个例子。Java 8增加了一种特殊的注解`@FunctionalInterface`,但是这个注解通常不是必须的(某些情况建议使用)，只要接口只包含一个抽象方法，虚拟机会自动判断该接口为函数式接口。一般建议在接口上使用`@FunctionalInterface` 注解进行声明，这样的话，编译器如果发现你标注了这个注解的接口有多于一个抽象方法的时候会报错的，如下图所示
+
+[![@FunctionalInterface 注解](https://camo.githubusercontent.com/1fa0456a959db0100192af7a9699b32329a6b33d/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d322f4046756e6374696f6e616c496e746572666163652e706e67)](https://camo.githubusercontent.com/1fa0456a959db0100192af7a9699b32329a6b33d/68747470733a2f2f6d792d626c6f672d746f2d7573652e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f323031392d322f4046756e6374696f6e616c496e746572666163652e706e67)
+
+示例：
+
+```java
+@FunctionalInterface
+public interface Converter<F, T> {
+  T convert(F from);
+}
+    // TODO 将数字字符串转换为整数类型
+    Converter<String, Integer> converter = (from) -> Integer.valueOf(from);
+    Integer converted = converter.convert("123");
+    System.out.println(converted.getClass()); //class java.lang.Integer
+```
+
+**译者注：** 大部分函数式接口都不用我们自己写，Java8都给我们实现好了，这些接口都在java.util.function包里。
+
+### 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
