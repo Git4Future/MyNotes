@@ -142,7 +142,7 @@ realm = My First Repository
 # max-encryption = 256
 ```
 
-**8.配置账户密码文件****
+**8.配置账户密码文件**
 
 ```
 vim passwd 
