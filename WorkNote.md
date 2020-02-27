@@ -14,7 +14,7 @@ rpm -qa | grep subversion
 
 如果已经安装过会有如下显示:
 
-![1582680744880](/home/anyuan/.config/Typora/typora-user-images/1582680744880.png)
+![1582680744880](./image/1582680744880.png)
 
 **2.通过yum命令安装svnserve**
 
@@ -28,7 +28,7 @@ yum -y install subversion
 svnserve --version
 ```
 
-![1582680851571](/home/anyuan/.config/Typora/typora-user-images/1582680851571.png)
+![1582680851571](./image/1582680851571.png)
 
 **4.创建仓库根目录**
 
@@ -38,7 +38,7 @@ mkdir -p /home/svn/svnrepos
 
 mkdir ： 如果存在上级目录不存在的情况，会无法创建下级目录, 会提出ERROR
 
-![1582681063150](/home/anyuan/.config/Typora/typora-user-images/1582681063150.png)
+![1582681063150](./image/1582681063150.png)
 
 mkdir -p ：递归创建目录，即使上级目录不存在，会按目录层级自动创建目录
 
@@ -48,11 +48,11 @@ mkdir -p ：递归创建目录，即使上级目录不存在，会按目录层�
 svnadmin create /home/svn/svnrepos/documents
 ```
 
-![1582681241142](/home/anyuan/.config/Typora/typora-user-images/1582681241142.png)
+![1582681241142](./image/1582681241142.png)
 
 **6.查看新建好的仓库目录**
 
-![1582681326919](/home/anyuan/.config/Typora/typora-user-images/1582681326919.png)
+![1582681326919](./image/1582681326919.png)
 
 仓库目录说明:
 
@@ -150,7 +150,7 @@ vim passwd
 
 新建一个用户账户:langzhe,密码为langzhe
 
-![1582682937209](/home/anyuan/.config/Typora/typora-user-images/1582682937209.png)
+![1582682937209](./image/1582682937209.png)
 
 **9.配置访问权限文件**
 
@@ -160,7 +160,7 @@ vim authz
 
 新建研发分组DEV_GROUP并且为用户langzhe和DEV_GROUP组配置访问权限
 
-![1582683487984](/home/anyuan/.config/Typora/typora-user-images/1582683487984.png)
+![1582683487984](./image/1582683487984.png)
 
 **10.修改svnserve的配置文件，指定版本库的路径**
 
@@ -172,7 +172,7 @@ vim /etc/sysconfig/svnserve
 用来明确-r参数的确切仓库位置
 ```
 
-![1582683720475](/home/anyuan/.config/Typora/typora-user-images/1582683720475.png)
+![1582683720475](./image/1582683720475.png)
 
 **11.启动svn服务**
 
@@ -182,7 +182,7 @@ vim /etc/sysconfig/svnserve
 ps -ef | grep svn
 ```
 
-![1582684431746](/home/anyuan/.config/Typora/typora-user-images/1582684431746.png)
+![1582684431746](./image/1582684431746.png)
 
 ```java
 ps
@@ -197,7 +197,7 @@ ps
 netstat -antpl | grep svnserve
 ```
 
-![1582684920295](/home/anyuan/.config/Typora/typora-user-images/1582684920295.png)
+![1582684920295](./image/1582684920295.png)
 
 ```c
 netstat常见参数
