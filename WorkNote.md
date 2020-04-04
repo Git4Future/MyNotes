@@ -1,8 +1,70 @@
-# WorkNote
 
-## Linux
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Linux部署
 
 ### 如何在Linux服务器部署SVN服务?
+
+------
 
 ***环境:centos7.5,svnserve***
 
@@ -71,14 +133,14 @@ vim svnserve.conf
 
 **去掉以下配置项的##注释,并且注意顶行不要有空格**
 
-```
+```shell
 anon-access = read   # 匿名用户可读，改成none，禁止匿名访问
 auth-access = write   # 授权用户可写
 password-db = passwd   # 使用哪个文件作为账号文件
 authz-db = authz   # 使用哪个文件作为权限文件
 ```
 
-```c++
+```shell
 ### This file controls the configuration of the svnserve daemon, if you
 ### use it to allow access to this repository.  (If you only allow
 ### access through http: and/or file: URLs, then this file is
@@ -176,6 +238,10 @@ vim /etc/sysconfig/svnserve
 
 **11.启动svn服务**
 
+```
+svnserve -d -r /home/svn/svnrepos/document
+```
+
 **12.查看SVN服务状态是否正常**
 
 ```
@@ -184,7 +250,7 @@ ps -ef | grep svn
 
 ![1582684431746](./image/1582684431746.png)
 
-```java
+```shell
 ps
 -e : 显示所有进程
 -f : 全格式输出
@@ -199,7 +265,7 @@ netstat -antpl | grep svnserve
 
 ![1582684920295](./image/1582684920295.png)
 
-```c
+```shell
 netstat常见参数
 -a或--all：显示所有选项，默认不显示LISTEN相关
 -t或--tcp：仅显示tcp相关选项
@@ -230,6 +296,254 @@ svn://ip地址/documents
 
 
 
+### 基于docker部署Linux开发环境
+
+------
+
+***notice:本次部署软件版本仅针对具体项目使用,本文档仅提供单机安装操作命令支撑,具体集群服务部署以及相关配置不包含在本文档范围***
+
+***部署清单***
+
+| 安装软件 | 版本      |
+| -------- | --------- |
+| 操作系统 | Centos7.5 |
+| Mysql    | 5.7       |
+| Redis    | 3.2       |
+| Nginx    | 1.0       |
+| RabbitMQ | 3.7.15    |
+
+
+
+
+
+
+
+
+
+#### Docker环境安装
+
+**1.添加yum源**
+
+```shell
+sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+```
+
+**2.查看版本库**
+
+![1583130924589](./image/1583130924589.png)
+
+**3.安装docker**
+
+```shell
+sudo yum install docker-ce
+```
+
+**4.启动docker**
+
+```shell
+ sudo systemctl start docker
+```
+
+**5.开启开机自动启动**
+
+```shell
+sudo systemctl enable docker
+```
+
+**6.查看docker版本,是否安装成功**
+
+```shell
+docker version
+```
+
+![1583131464020](./image/1583131464020.png)
+
+
+
+
+
+#### Mysql安装
+
+**1.下载MySQL镜像**
+
+```shell
+docker pull mysql:5.7
+```
+
+**2.使用docker命令启动**
+
+```shell
+  docker run -p 3306:3306 --name mysql \
+  -v /mydata/mysql/log:/var/log/mysql \
+  -v /mydata/mysql/data:/var/lib/mysql \
+  -v /mydata/mysql/conf:/etc/mysql \
+  -e MYSQL_ROOT_PASSWORD=root  \
+  -d mysql:5.7
+```
+
+***参数说明:***
+
+```shell
+-p 3306:3306：将容器的3306端口映射到主机的3306端口
+-v /mydata/mysql/conf:/etc/mysql：将配置文件夹挂在到主机
+-v /mydata/mysql/log:/var/log/mysql：将日志文件夹挂载到主机
+-v /mydata/mysql/data:/var/lib/mysql/：将数据文件夹挂载到主机
+-e MYSQL_ROOT_PASSWORD=root：初始化root用户的密码
+```
+
+**3.进入运行MySQL的容器**
+
+```shell
+docker exec -it mysql /bin/bash
+```
+
+**4.使用mysql命令打开客户端**
+
+```shell
+mysql -uroot -proot --default-character-set=utf8
+```
+
+**5.创建数据库**
+
+```shell
+create database mall character set utf8
+```
+
+**6.安装上传下载文件插件，并将mall.sql文件上传到Linux服务器上**
+
+```shell
+yum -y install lrzsz
+```
+
+**7.将mall.sql文件拷贝到mysql容器的/目录下**
+
+```shell
+docker cp mydata/mall.sql mysql:/
+```
+
+**8.将sql文件导入到数据库**
+
+```
+use mall;
+source /mall.sql;
+```
+
+**9.创建一个anyuan帐号并修改权限，使得任何ip都能访问**
+
+```
+grant all privileges on *.* to 'anyuan' @'%' identified by 'saas';
+```
+
+
+
+
+
+#### Redis安装
+
+**1.下载redis3.2镜像**
+
+```shell
+docker pull redis:3.2
+```
+
+**2.使用docker命令启动**
+
+```shell
+docker run -p 6379:6379 --name redis \
+-v /mydata/redis/data:/data \
+-d redis:3.2 redis-server --appendonly yes
+```
+
+**3.进入redis容器使用redis-cli命令进行连接**
+
+```shell
+docker exec -it redis redis-cli
+```
+
+
+
+#### Nginx安装
+
+**1.下载nginx1.0的镜像**
+
+```shell
+docker pull nginx:1.10
+```
+
+**2.先运行一次容器（为了拷贝配置文件）**
+
+```shell
+docker run -p 80:80 --name nginx \
+-v /mydata/nginx/html:/usr/share/nginx/html \
+-v /mydata/nginx/logs:/var/log/nginx  \
+-d nginx:1.10
+```
+
+**3.将容器内的配置文件拷贝到指定目录**
+
+```shell
+docker container cp nginx:/etc/nginx /mydata/nginx/
+```
+
+**4.修改文件名称**
+
+```shell
+mv nginx conf
+```
+
+**5.终止并删除容器**
+
+```shell
+docker stop nginx
+docker rm nginx
+```
+
+**6.使用docker命令启动**
+
+```shell
+docker run -p 80:80 --name nginx \
+-v /mydata/nginx/html:/usr/share/nginx/html \
+-v /mydata/nginx/logs:/var/log/nginx  \
+-v /mydata/nginx/conf:/etc/nginx \
+-d nginx:1.10
+```
+
+
+
+#### RabbitMQ安装
+
+**1.下载rabbitmq3.7.15的docker镜像**
+
+```shell
+docker pull rabbitmq:3.7.15
+```
+
+**2.使用docker命令启动**
+
+```shell
+docker run -d --name rabbitmq \
+--publish 5671:5671 --publish 5672:5672 --publish 4369:4369 \
+--publish 25672:25672 --publish 15671:15671 --publish 15672:15672 \
+rabbitmq:3.7.15
+```
+
+**3.进入容器并开启管理功能**
+
+```shell
+docker exec -it rabbitmq /bin/bash
+rabbitmq-plugins enable rabbitmq_management
+```
+
+**4.开启防火墙**
+
+```shell
+firewall-cmd --zone=public --add-port=15672/tcp --permanent
+firewall-cmd --reload
+```
+
+**5.访问地址查看是否安装成功：http://localhost:15672/**
+
+默认用户名密码:guest/guest
 
 
 
@@ -270,11 +584,229 @@ svn://ip地址/documents
 
 
 
-## Java
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Linux命令
+
+### **netstat**
+
+```shell
+netstat常见参数
+-a或--all：显示所有选项，默认不显示LISTEN相关
+-t或--tcp：仅显示tcp相关选项
+-u或--udp：仅显示udp相关选项
+-n或--numeric：直接使用ip地址，而不通过域名服务器（拒绝显示别名，能显示数字的全部转化成数字）
+-l或--listening：仅列出有在 Listen (监听) 的服務状态
+-p或--programs：显示建立相关链接的程序名
+-r或--route：显示路由信息，路由表
+-e或--extend：显示扩展信息，例如uid等
+-s或--statistice：显示网络工作信息统计表（按各个协议进行统计）
+-c或--continuous：每隔一个固定时间，执行该netstat命令。
+提示：LISTEN和LISTENING的状态只有用-a或者-l才能看到
+```
+
+***用例:查看redis端口服务***
+
+![1583127124219](./image/1583127124219.png)
+
+### ps 
+
+```shell
+ps
+-e : 显示所有进程
+-f : 全格式输出
+-a : 显示所有进程
+-u : by effective user ID (supports names)
+-x : processes w/o controlling ttys 
+```
+
+***用例:查看Java或者tomcat相关进程***
+
+![1583127500715](./image/1583127500715.png)
+
+### vim
+
+#### **1.vim查找搜索关键词?**
+
+```shell
+vim打开文档,命令模式下，输入/加上需要搜索的关键词.例如查找"user"字符串,直接在命令模式下:
+/user
+按小写字母n键查找下一个匹配项
+按大写字母N键查找上一个匹配项
+?user从下往上搜索
+```
+
+
+
+### &
+
+Linux/Unix下一般如果想让某个程序在后台运行，很多都是使用&在程序结尾来让程序自动运行的。比如我们想要让mysql运行在后台：
+
+```shell
+/usr/local/mysql/bin/mysqld_safe --user=mysql &
+```
+
+
+
+### nohup
+
+　但是我们很多程序并不象mysqld一样可以做成守护进程，可能我们的程序只是普通程序而已，一般这种程序即使使用 & 结尾，如果终端关闭，那么程序也会被关闭。为了能够后台运行，我们需要使用nohup这个命令，比如我们有个start.sh需要在后台运行，并且希望在后台能够一直运行，那么就使用nohup
+
+```shell
+nohup /root/start.sh & 1
+```
+
+在shell中回车后提示：
+
+```shell
+[~]$ appending output to nohup.out 1
+```
+
+原程序的的标准输出被自动改向到当前目录下的nohup.out文件，起到了log的作用。
+
+***注意*：**当shell中提示了nohup成功后还需要按终端上键盘任意键退回到shell输入命令窗口，然后通过在shell中输入exit来退出终端.如果每次在nohup执行成功后直接点关闭程序按钮关闭终端,这时候会断掉该命令所对应得到session，导致nohup对应的进程被通知需要一起shutdown。 
+
+
+
+### docker
+
+#### **1.列出所有容器**
+
+```shell
+docker ps 
+  -a :显示所有的容器，包括未运行的。
+  -f :根据条件过滤显示的内容。
+  --format :指定返回值的模板文件。
+  -l :显示最近创建的容器。
+  -n :列出最近创建的n个容器。
+  --no-trunc :不截断输出。
+  -q :静默模式，只显示容器编号。
+  -s :显示总的文件大小。
+```
+
+#### 2.列出所有镜像
+
+```shell 
+docker images
+```
+
+#### 3.删除镜像或者删除容器
+
+```shell
+docker rm + 容器id
+```
+
+```shell
+docker rmi + 镜像id
+```
+
+#### 4.在运行的容器中执行命令
+
+```shell 
+docker exec
+  -d :分离模式: 在后台运行
+  -i :即使没有附加也保持STDIN 打开
+  -t :分配一个伪终端
+```
+
+***实例:在容器 elasticsearch 中开启一个交互模式的终端***
+
+```shell
+ docker exec -it elasticsearch /bin/bash
+```
+
+![1583981817237](./image/1583981817237.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Java开发日志
 
 ### SpirngBoot项目框架
 
-#### 技术栈介绍
+#### 1.技术栈介绍
 
 | 技术栈            | 版本号        |
 | ----------------- | ------------- |
@@ -282,73 +814,13 @@ svn://ip地址/documents
 | Mybatis Generator | 1.3.3         |
 | Druid             | 1.1.10        |
 | PagerHelper       | 1.2.10        |
-| Swagger-UI        |               |
+| Swagger-UI        | 2.7.0         |
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-------
-
-
-
-#### **技术点介绍**
+#### **2.技术点介绍**
 
 ##### Swagger-UI
 
-```
+```html
 Swagger-UI是HTML, Javascript, CSS的一个集合，可以动态地根据注解生成在线API文档。
 ```
 
@@ -453,10 +925,6 @@ public class PmsBrandController {
 
 
 
-------
-
-
-
 
 
 
@@ -491,17 +959,17 @@ public class PmsBrandController {
 
 #### 笔记
 
-**1.@Configuration注解**
+##### **1.@Configuration注解**
 
+##### **2.@PropertySource注解**
 
+##### **3.@primary注解**
 
-**2.@PropertySource注解**
+##### **4.@Qualifier注解**
 
-**3.@Primary注解**
+##### 5.session和token的区别
 
-**4.@Qualifier注解**
-
-
+##### 6.@Mapper注解和@Repository注解
 
 
 
