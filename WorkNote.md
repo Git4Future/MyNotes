@@ -1,70 +1,12 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## Linux部署
 
 ### 如何在Linux服务器部署SVN服务?
 
 ------
+
+**IP:192.168.0.139**
+
+**Admin@!@#$%^**
 
 ***环境:centos7.5,svnserve***
 
@@ -283,7 +225,7 @@ netstat常见参数
 **13.确认服务无误后,访问通过客户端访问SVN服务**
 
 ```
-svn://ip地址/documents
+svn://192.168.0.139/documents
 ```
 
 
@@ -975,23 +917,13 @@ public class PmsBrandController {
 
 
 
+------
+
+### API接口安全设计
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+![apisecurity](./image/apisecurity.jpg)
 
 
 
