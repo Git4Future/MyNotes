@@ -899,7 +899,7 @@ public class PmsBrandController {
 
 
 
-### 笔记
+### 每天一个知识点
 
 #### 1.springboot注解
 
@@ -922,6 +922,8 @@ public class PmsBrandController {
 ##### 1.8.@PostConstruct
 
 #### 2.session和token的区别
+
+#### 3.RPC和HTTP请求区别？
 
 
 
