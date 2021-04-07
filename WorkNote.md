@@ -1,70 +1,12 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## Linux部署
 
 ### 如何在Linux服务器部署SVN服务?
 
 ------
+
+**IP:192.168.0.139**
+
+**Admin@!@#$%^**
 
 ***环境:centos7.5,svnserve***
 
@@ -283,7 +225,7 @@ netstat常见参数
 **13.确认服务无误后,访问通过客户端访问SVN服务**
 
 ```
-svn://ip地址/documents
+svn://192.168.0.139/documents
 ```
 
 
@@ -957,31 +899,29 @@ public class PmsBrandController {
 
 
 
-#### 笔记
+### 笔记
 
-##### **1.@Configuration注解**
+#### 1.springboot注解
 
-##### **2.@PropertySource注解**
-
-##### **3.@primary注解**
-
-##### **4.@Qualifier注解**
-
-##### 5.session和token的区别
-
-##### 6.@Mapper注解和@Repository注解
+##### **1.1.@Configuration注解**
 
 
 
+##### **1.2.@PropertySource注解**
 
+##### **1.3.@primary注解**
 
+##### **1.4.@Qualifier注解**
 
+##### 
 
+##### 1.6.@Mapper注解和@Repository注解
 
+##### 1.7.@Annotation自定义注解(实现方法计时器)
 
+##### 1.8.@PostConstruct
 
-
-
+#### 2.session和token的区别
 
 
 
@@ -992,6 +932,40 @@ public class PmsBrandController {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+------
+
+### API接口安全设计
+
+
+
+![apisecurity](./image/apisecurity.jpg)
 
 
 
