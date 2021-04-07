@@ -5301,3 +5301,15 @@ void solveLostBlack(TreeNode *pNode) {
         pNode->color = black;
     }
 ```
+
+
+
+
+
+
+
+
+
+
+
+# 设计模式
