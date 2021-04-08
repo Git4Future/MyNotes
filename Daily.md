@@ -1,6 +1,6 @@
-## 每天一个知识点
+# 每天一个知识点
 
-#### 1.RPC和HTTP请求区别？
+## 1.RPC和HTTP请求区别？
 
 **RPC:**
 
@@ -35,6 +35,107 @@ Http(超文本传输协议)，是一种应用层协议。规定了网络传输�
 
 
 
-#### 2.session和token的区别?
+## 2.cookie、session和token的区别?
 
-#### 3.== 和equals的区别?
+**关于session:**
+用户登录网页时会给服务器发送请求，带着用户信息，此时服务器会进行判断并返回session给用户
+
+1.服务器获取用户信息。
+2.判断验证用户。
+3.判断成功，将用户信息写入redis并得到sessionid。
+4.将session写入cookie返回给前端发送给用户。
+5.用户拿着session去请求服务器，服务器解析session后判断用户信息并成功访问。
+
+**session的缺点：**
+1.因为用户信息是保存在**服务端**的**内存中的**，随着用户量增大，所需要的内存资源也随之增大，不可避免的造成内存溢出。
+2.因为session是基于cookie来进行用户识别的，所以如果cookie会被黑客截获进行CSRF攻击，这样一来就容易被跨站攻击，用户信息被泄露，造成经济损失,虽然   可以关闭浏览器每次访问都携带cookie和session信息的功能，但是有些网站是基于session登录，这样一来就无法使用该网页。
+3.随着用户量信息量增多，不可避免进行扩容，建立服务器集群。而随之而来问题就是当用户登录服务器1的时候进行下一个操作可能会被分配到服务器2，此时服务器2没有保存用户的登录信息，所以需要进行再次登录。此时造成了逻辑缺失。
+
+**关于token**
+token机制与session机制的差距不大，最主要的是服务器处理的第三步：
+
+session： 判断成功，将用户信息写入redis并得到sessionid。
+token：判断成功，将用户信息进行加密生成一个加密字符串保存在token变量中。
+此时服务器返回给用户的就不是session值而是一个token值,前端接受加密字符串通过js代码保存在storage中，用户使用该token值访问网页，网页使用get方法通过js代码获取storage中的token值，并且进行解密，当解密成功获取用户信息。
+
+token值就像一串随机字符串，就算被黑客截获也无法使用token来跨域攻击网站致使用户信息泄露，因为浏览器的同源策略致使无法使用不同浏览器登录用户；其次token值不是存在cookie中，而是随着js代码保存在storage中。
+
+
+
+## 3.== 和equals的区别?
+
+1. **==，比较的是值是否相等。**
+
+如果作用于基本数据类型的变量，则直接比较其存储的 值是否相等，如果作用于引用类型的变量，则比较的是所指向的对象的地址是否相等。
+
+```
+其实==比较的不管是基本数据类型，还是引用数据类型的变量，比较的都是值，只是引用类型变量存的值是对象的地址
+```
+
+2. **对于equals方法，比较的是是否是同一个对象。**
+
+首先，equals()方法不能作用于基本数据类型的变量，
+
+另外，equals()方法存在于Object类中，而Object类是所有类的直接或间接父类，所以说所有类中的equals()方法都继承自Object类，在没有重写equals()方法的类中，调用equals()方法其实和使用==的效果一样，也是比较的是引用类型的变量所指向的对象的地址，不过，Java提供的类中，有些类都重写了equals()方法，重写后的equals()方法一般都是比较两个对象的值，比如String类。
+
+Object类equals()方法源码：
+
+```
+public boolean equals(Object obj) {
+     return (this == obj);
+}
+```
+
+- 情况 1：类没有覆盖 `equals()`方法。则通过`equals()`比较该类的两个对象时，等价于通过“==”比较这两个对象。使用的默认是 `Object`类`equals()`方法。
+- 情况 2：类覆盖了 `equals()`方法。一般，我们都覆盖 `equals()`方法来两个对象的内容相等；若它们的内容相等，则返回 true(即，认为这两个对象相等)。
+
+```java
+public class test1 {
+    public static void main(String[] args) {
+        String a = new String("ab"); // a 为一个引用
+        String b = new String("ab"); // b为另一个引用,对象的内容一样
+        String aa = "ab"; // 放在常量池中
+        String bb = "ab"; // 从常量池中查找
+        if (aa == bb) // true
+            System.out.println("aa==bb");
+        if (a == b) // false，非同一对象
+            System.out.println("a==b");
+        if (a.equals(b)) // true
+            System.out.println("aEQb");
+        if (42 == 42.0) { // true
+            System.out.println("true");
+        }
+    }
+}
+```
+
+**说明：**
+
+- `String` 中的 `equals` 方法是被重写过的，因为 `Object` 的 `equals` 方法是比较的对象的内存地址，而 `String` 的 `equals` 方法比较的是对象的值。
+- 当创建 `String` 类型的对象时，虚拟机会在常量池中查找有没有已经存在的值和要创建的值相同的对象，如果有就把它赋给当前引用。如果没有就在常量池中重新创建一个 `String` 对象。
+
+`String`类`equals()`方法：
+
+```java
+public boolean equals(Object anObject) {
+    if (this == anObject) {
+        return true;
+    }
+    if (anObject instanceof String) {
+        String anotherString = (String)anObject;
+        int n = value.length;
+        if (n == anotherString.value.length) {
+            char v1[] = value;
+            char v2[] = anotherString.value;
+            int i = 0;
+            while (n-- != 0) {
+                if (v1[i] != v2[i])
+                    return false;
+                i++;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+```
